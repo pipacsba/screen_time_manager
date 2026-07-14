@@ -1,6 +1,7 @@
 {
   "_comment": "config.json",
-  "ha_rest_url": "wss://homeassistant.local/api/websocket",
+  "ha_url": "wss:/homeassistant.local/api/websocket",
+  "ha_rest_url": "https://homeassistant.local/api/",
   "ha_desktop_state_entity": "sensor.desktop_session",
   "ha_poll_interval": 10,
   "token": "alonglastinghatoken",
