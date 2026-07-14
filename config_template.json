@@ -1,0 +1,21 @@
+{
+  "_comment": "confhomeassistant.local/api/websocket",
+  "ha_rest_url": "https://192.168.17.11:8123/api/",
+  "ha_desktop_state_entity": "sensor.desktop_session"
+  "ha_poll_interval": 10,
+  "token": "alonglastinghatoken",
+
+  "users": {
+    "user1": {
+      "active_entity": "input_boolean.user1_computer_time_active",
+      "started_entity": "input_datetime.user1_computer_time_started",
+      "remaining_entity": "input_number.user1_computer_time_remaining_base"
+    },
+
+    "user2": {
+      "active_entity": "input_boolean.user2_computer_time_active",
+      "started_entity": "input_datetime.user2_computer_time_started",
+      "remaining_entity": "input_number.user2_computer_time_remaining_base"
+    }
+  }
+}
