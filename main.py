@@ -43,7 +43,7 @@ def main():
             #
             # No active desktop session
             #
-            if session is None:
+            if not session.interactive_session:
 
                 if workers is not None:
 
