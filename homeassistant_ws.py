@@ -27,9 +27,14 @@ class HomeAssistantClient:
         )
 
     def run(self):
-        self.ws.run_forever(
-            sslopt={"cert_reqs": ssl.CERT_NONE}
-        )
+        while not self.stop_event.is_set():
+            logger.info("Starting Home Assistant WS connection...")
+            self.ws.run_forever(
+                sslopt={"cert_reqs": ssl.CERT_NONE}
+            )
+            if not self.stop_event.is_set():
+                logger.warning("WS connection lost. Reconnecting in 5 seconds...")
+                self.stop_event.wait(5)
 
     def close(self):
         self.ws.close()
