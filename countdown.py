@@ -121,5 +121,5 @@ def countdown(model, status, stop_event):
             )
             last_text = text
 
-        stop_event.wait(1):
+        if stop_event.wait(1):
             break
