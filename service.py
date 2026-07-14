@@ -45,35 +45,32 @@ def decode_gdbus_json(output: str) -> dict:
     return json.loads(json_text)
 
 def focused_window(user):
-
-    #env = os.environ.copy()
-
-    #env["XDG_RUNTIME_DIR"] = self.runtime_dir
-
-    #env["DBUS_SESSION_BUS_ADDRESS"] = self.bus_address
-
-    result = subprocess.run(
-        [
-            "runuser",
-            "-u",
-            user,
-            "--",
-            "gdbus",
-            "call",
-            "--session",
-            "--dest",
-            "org.gnome.Shell",
-            "--object-path",
-            "/org/gnome/shell/extensions/FocusedWindow",
-            "--method",
-            "org.gnome.shell.extensions.FocusedWindow.Get",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    return decode_gdbus_json(result.stdout)
+    try:
+        result = subprocess.run(
+            [
+                "runuser",
+                "-u",
+                user,
+                "--",
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.gnome.Shell",
+                "--object-path",
+                "/org/gnome/shell/extensions/FocusedWindow",
+                "--method",
+                "org.gnome.shell.extensions.FocusedWindow.Get",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=3, # Add a timeout so it never hangs
+        )
+        return decode_gdbus_json(result.stdout)
+    except Exception as e:
+        logger.warning("Failed to get focused window for %s: %s", user, e)
+        return {"app": "unknown", "title": "unknown"}
 
 def get_active_session():
 
