@@ -124,7 +124,7 @@ def discover_session():
     if not session:
         state = Session(
                 interactive_session= False,
-                user= "",
+                user= None,
                 uid= None,
                 session= None,
                 idle= True,
