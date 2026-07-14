@@ -116,12 +116,12 @@ class HomeAssistantPublisher:
                 "state": "active" if session.interactive_session else "inactive",
                 "attributes": {
                     "interactive_session": session.interactive_session,
-                    "user": session.user,
-                    "uid": session.uid,
-                    "session": session.session,
+                    "user": session.user if session.user else "", # Safe fallback
+                    "uid": session.uid if session.uid else 0,
+                    "session": session.session if session.session else "",
                     "idle": session.idle,
-                    "app": session.app,
-                    "app_title": session.app_title,
+                    "app": session.app if session.app else "",
+                    "app_title": session.app_title if session.app_title else "",
                 },
             }
 
