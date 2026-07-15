@@ -14,6 +14,7 @@ application is stopped.
 import json
 import ssl
 from datetime import datetime
+from dateutil.tz import tzlocal
 
 import websocket
 import logging
@@ -187,6 +188,8 @@ class HomeAssistantClient:
             elif entity == self.user.started_entity:
 
                 self.model.started = datetime.fromisoformat(state)
+                if self.model.started.tzinfo is None:
+                    self.model.started = self.model.started.replace(tzinfo=tzlocal())
 
             elif entity == self.user.remaining_entity:
 
