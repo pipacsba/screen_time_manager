@@ -219,7 +219,7 @@ def discover_session() -> Session:
         session["uid"],
     )
 
-    logger.info("Focused window: %r", window)
+    #logger.info("Focused window: %r", window)
 
     return Session(
         interactive_session=True,
@@ -229,6 +229,6 @@ def discover_session() -> Session:
         idle=False,
         runtime_dir=Path(f"/run/user/{session['uid']}"),
         bus=f"unix:path=/run/user/{session['uid']}/bus",
-        app=window.get("app"),
+        app=window.get("wm_class"),
         app_title=window.get("title"),
     )
