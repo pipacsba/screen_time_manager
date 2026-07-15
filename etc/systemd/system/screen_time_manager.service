@@ -1,0 +1,26 @@
+[Unit]
+Description=Screen Time Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+User=root
+Group=root
+
+WorkingDirectory=/srv/venv/ha_tray
+ExecStart=/srv/venv/ha_tray/bin/python /srv/venv/ha_tray/screen_time_manager/main.py
+
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging goes to journalctl
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
