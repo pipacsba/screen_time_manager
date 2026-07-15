@@ -1,668 +1,99 @@
+# Screen Time Manager
 
-# HA Screen Time Monitor
+An open-source screen time management solution for Linux desktops, tightly integrated with Home Assistant.
 
-## Overview
+The project combines a lightweight Python background service, a GNOME Shell extension, and Home Assistant automations to provide a flexible and transparent screen time management system. Rather than enforcing limits locally, Home Assistant remains the central source of truth, making it easy to automate rewards, exemptions, schedules, and dashboards.
 
-HA Screen Time Monitor is a lightweight desktop companion for Home Assistant.
-
-Its primary purpose is to:
-
-- display the remaining computer time in the desktop status bar (Waybar),
-- keep the countdown synchronized with Home Assistant,
-- enforce the configured time limit by locking the desktop after a configurable grace period,
-- publish information about the active desktop session back to Home Assistant.
-
-The application is designed as a long-running **systemd service** that continuously follows the currently active graphical user session.
-
-## External Dependencies
-
-The Python service relies on the following GNOME Shell extension:
-
-- Focused Window D-Bus Extension
-
-It exposes the currently focused application and window title via D-Bus, allowing the Python service to determine which application is currently active.
-
-This project does not include that extension.
+---
 
 ## Why this project?
 
-Most parental-control solutions are designed as isolated systems: they enforce time limits locally, but offer little flexibility for automation or integration with the rest of the home.
+Most existing parental-control solutions are closed ecosystems with limited automation capabilities.
 
-This project takes a different approach by making **Home Assistant the single source of truth** for screen time management.
+This project takes a different approach:
 
-The Linux client is intentionally lightweight. It is responsible only for:
+* **Home Assistant is the brain.** All policies, rewards, schedules, and automations are managed in Home Assistant.
+* **Linux remains in control of the desktop.** The local service only reports desktop activity, displays the remaining time, and enforces the configured limits.
+* **Everything is transparent.** Every component is open source, configurable, and easy to extend.
 
-- detecting the active desktop session,
-- displaying the remaining time to the user,
-- enforcing the configured limit locally, and
-- synchronizing state with Home Assistant.
-
-All policy decisions—such as when time should be consumed, which applications are exempt, how bonus time is earned, and when daily allowances are reset—are implemented entirely in Home Assistant.
-
-This separation has several advantages:
-
-- **Flexible automation** – screen time can depend on presence, schedules, homework, or any other Home Assistant entity.
-- **Reward-based learning** – educational activities can automatically grant additional computer time.
-- **Persistence** – remaining allowance survives reboots and Home Assistant restarts.
-- **Transparency** – parents can monitor the current state from Home Assistant dashboards.
-- **Extensibility** – additional users, applications, or automation rules can be added without modifying the Linux client.
-
-The result is a modular architecture where the desktop application focuses solely on interacting with the operating system, while Home Assistant defines the screen-time policy.
+The result is a solution that integrates naturally into an existing smart home instead of replacing it.
 
 ---
 
-# High-Level Architecture
-
-```
-                  +----------------------+
-                  |      Home Assistant  |
-                  |                      |
-                  |  WebSocket   REST    |
-                  +-----------+----------+
-                              ^
-                 Sync state    | Publish desktop state
-                              |
-             +----------------+----------------+
-             |                                 |
-             |     HA Screen Time Monitor      |
-             |                                 |
-             |  +--------------------------+   |
-             |  |       Main Loop          |   |
-             |  +------------+-------------+   |
-             |               |                 |
-             |               | discovers       |
-             |               v                 |
-             |      Desktop Session            |
-             |                                 |
-             |  starts/stops worker threads    |
-             +-------+------------+------------+
-                     |            |
-                     |            |
-         +-----------+            +-----------+
-         |                                    |
-         v                                    v
-
- +-------------------+              +-------------------+
- | HomeAssistant WS  |              | HomeAssistant REST|
- |                   |              |                   |
- | receives updates  |              | polling fallback  |
- +---------+---------+              +---------+---------+
-           |                                  |
-           +---------------+------------------+
-                           |
-                           v
-                   Shared ComputerTime Model
-                           |
-                           v
-                     Countdown Thread
-                           |
-                           |
-              +------------+------------+
-              |                         |
-              v                         v
-       Waybar status.json         Notifications
-                                  Screen locking
-```
-
----
-
-# Runtime Flow
-
-## 1. Session discovery
-
-The main thread periodically asks:
-
-> "Who is currently using the desktop?"
-
-This is performed by `service.py`.
-
-The discovery process:
-
-- enumerates all login sessions (`loginctl`)
-- ignores SSH sessions
-- ignores idle sessions
-- verifies the user owns a desktop D-Bus
-- retrieves the currently focused application from GNOME Shell
-
-The result is represented by a `Session` object.
-
----
-
-## 2. Publishing desktop information
-
-Whenever anything about the session changes, the monitor publishes the current desktop state to Home Assistant.
-
-Published information includes:
-
-- logged in user
-- session id
-- active application
-- active window title
-- idle status
-
-This allows Home Assistant automations to react to desktop activity.
-
----
-
-## 3. Worker lifecycle
-
-Whenever a configured user becomes active:
-
-```
-Main
-    │
-    ├── Countdown thread
-    ├── WebSocket thread
-    └── REST synchronization thread
-```
-
-When the user logs out or another user logs in:
-
-- all workers are stopped
-- the WebSocket is closed
-- threads are joined
-- a new set of workers is created for the new session
-
-Workers are therefore always tied to exactly one desktop session.
-
----
-
-# Worker Responsibilities
-
-## Main Thread
-
-Responsible for:
-
-- session discovery
-- worker creation/destruction
-- publishing desktop state
-- handling user switches
-
-The main thread intentionally performs very little work.
-
----
-
-## WebSocket Thread
-
-Maintains a persistent Home Assistant WebSocket connection.
-
-Responsibilities:
-
-- authenticate
-- subscribe to entity changes
-- immediately update the shared model
-
-This is the preferred synchronization mechanism because updates arrive almost instantly.
-
----
-
-## REST Thread
-
-Acts as a safety net.
-
-Responsibilities:
-
-- periodically read the authoritative state from Home Assistant
-- recover after missed WebSocket events
-- recover after reconnects
-
-Even if the WebSocket temporarily disconnects, the countdown eventually resynchronizes.
-
----
-
-## Countdown Thread
-
-Runs once per second.
-
-Responsibilities:
-
-- calculate remaining time
-- update Waybar
-- send desktop notifications
-- start the grace period
-- lock the session when the grace period expires
-
-This thread never communicates directly with Home Assistant.
-
-It only consumes the shared model.
-
----
-
-# Shared Model
-
-All worker threads share a single `ComputerTime` instance.
-
-```
-ComputerTime
- ├── active
- ├── started
- ├── remaining_base
- └── bootstrap
-```
-
-Access is protected by a mutex.
-
-The model intentionally contains only the minimum state necessary to compute the countdown.
-
----
-
-# Synchronization Strategy
-
-Home Assistant remains the single source of truth.
-
-```
-Home Assistant
-        │
-        │
-        ▼
- WebSocket / REST
-        │
-        ▼
- ComputerTime model
-        │
-        ▼
- Countdown display
-```
-
-The desktop application performs only short-lived optimistic updates (for example immediately after locking the screen).
-
-These are later overwritten by the authoritative values received from Home Assistant.
-
----
-
-# Status Output
-
-The countdown thread periodically writes
-
-```
-status.json
-```
-
-into
-
-```
-/run/user/<uid>/ha-time/
-```
-
-Example:
-
-```json
-{
-  "version": 1,
-  "text": "🎮 00:23:15",
-  "tooltip": "Computer time remaining",
-  "color": "green"
-}
-```
-
-The file is written atomically to prevent Waybar from reading partially written JSON.
-
----
-
-# Design Principles
-
-The application follows several design principles:
-
-- Home Assistant is the source of truth.
-- Each module has a single responsibility.
-- Desktop session detection is isolated from Home Assistant logic.
-- Worker threads communicate only through a shared model.
-- The main thread owns worker lifetime.
-- Failures should degrade gracefully rather than terminate the service.
-- The service should automatically recover from:
-  - WebSocket disconnects
-  - temporary Home Assistant outages
-  - desktop logouts
-  - user switches
-
----
-
-# Module Responsibilities
-
-| Module | Responsibility |
-|---------|----------------|
-| `main.py` | Application lifecycle and worker management |
-| `service.py` | Desktop session discovery |
-| `config.py` | Load configuration |
-| `model.py` | Shared thread-safe state |
-| `homeassistant_ws.py` | Real-time synchronization |
-| `homeassistant_rest.py` | REST synchronization and state publishing |
-| `countdown.py` | Countdown logic, notifications and screen locking |
-| `status.py` | Publish Waybar status JSON |
-| `logger.py` | Logging configuration |
-
----
-
-# Thread Model
-
-```
-                     Main Thread
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-        ▼                 ▼                 ▼
- Countdown Thread   WebSocket Thread   REST Thread
-
-              Shared ComputerTime Model
-```
-
-Only the shared model is accessed concurrently.
-
-Everything else is thread-local.
-
-This keeps synchronization simple while allowing each worker to operate independently.
-
-# GNOME Shell Countdown Extension
-
-## Overview
-
-The Screen Time Manager includes a small GNOME Shell extension that provides
-a live countdown directly in the desktop's top panel.
-
-Unlike the Python daemon, this extension contains **no screen-time logic**.
-Its only responsibility is to present the current status to the logged-in user
-in a native GNOME interface.
-
-The extension reads the status produced by the Python service and updates the
-panel automatically whenever it changes.
-
----
-
-## Responsibilities
-
-The extension is responsible for:
-
-- displaying the remaining computer time
-- showing whether the countdown is active or paused
-- changing icon/text colors according to the current state
-- reading the status generated by the Python daemon
-
-The extension is **not** responsible for:
-
-- communicating with Home Assistant
-- calculating remaining time
-- enforcing screen-time limits
-- discovering desktop sessions
-- business logic
+## Features
+
+* Live screen time countdown in the desktop status bar.
+* Home Assistant as the single source of truth.
+* Automatic session detection.
+* Real-time synchronization using Home Assistant WebSockets.
+* Automatic recovery after reconnects or Home Assistant restarts.
+* Configurable educational application exemptions.
+* Reward system driven by Home Assistant automations.
+* Daily allowance resets.
+* Grace period before locking the desktop.
+* Multi-user support.
+* Modular architecture designed for extension.
 
 ---
 
 ## Architecture
 
-```text
-                  Python daemon
+```
+                 Home Assistant
+                        ▲
                         │
-                        │ writes
-                        ▼
-      /run/user/<uid>/ha-time/status.json
-                        │
-                        │ monitors
-                        ▼
-          GNOME Shell Extension
+          WebSocket + REST synchronization
                         │
                         ▼
-            GNOME Top Panel Indicator
+           Python Screen Time Service
+                        │
+          ┌─────────────┴─────────────┐
+          │                           │
+          ▼                           ▼
+   Desktop Session             Waybar Status
+      Discovery                 & Notifications
+          │
+          ▼
+   Focused Window API
+     (GNOME Extension)
 ```
 
----
-
-## Status File
-
-The extension watches a single JSON file:
-
-```text
-/run/user/<uid>/ha-time/status.json
-```
-
-Example:
-
-```json
-{
-  "version": 1,
-  "text": "🎮 00:23:15",
-  "tooltip": "Computer time remaining",
-  "color": "green"
-}
-```
-
-The Python service updates this file atomically whenever the displayed status
-changes.
+The Python service continuously monitors the active desktop session, synchronizes the screen time state with Home Assistant, and updates the local desktop interface.
 
 ---
 
-## Event Flow
+## Components
 
-```text
-Home Assistant
-        │
-        ▼
-Python daemon
-        │
-        │ updates status.json
-        ▼
-GNOME Shell Extension
-        │
-        ▼
-Top Panel updates
-```
+The repository contains several independent components:
 
-The extension never communicates with Home Assistant directly.
+* **Python backend** – monitors desktop sessions, synchronizes with Home Assistant, and manages the local countdown.
+* **GNOME Shell extension** – displays the remaining time in the desktop panel.
+* **Home Assistant package** – implements the screen time policy, rewards, and automations.
+* **Focused Window GNOME extension** *(external dependency)* – exposes the currently focused application over D-Bus for educational application detection.
 
 ---
 
-## Why use a GNOME Extension?
+## Documentation
 
-Using a native GNOME Shell extension provides several advantages:
+Detailed documentation is available in the `docs/` directory:
 
-- integrates naturally into the desktop
-- updates instantly without polling Home Assistant
-- keeps desktop rendering separate from application logic
-- requires no network connectivity
-- remains lightweight and responsive
-
----
-
-## Separation of Responsibilities
-
-### Python daemon
-
-Responsible for:
-
-- synchronizing with Home Assistant
-- computing the live countdown
-- publishing desktop state
-- writing `status.json`
-
-### GNOME Shell Extension
-
-Responsible for:
-
-- monitoring `status.json`
-- rendering the countdown
-- updating the panel icon and tooltip
+* `architecture.md` — Overall system architecture
+* `python.md` — Python backend internals
+* `homeassistant.md` — Home Assistant package
+* `gnome-extension.md` — Tray extension
+* `focused-window-extension.md` — External dependency
+* `installation.md` — Installation guide
+* `configuration.md` — Configuration reference
+* `development.md` — Development notes
 
 ---
 
-## Design Philosophy
+## Installation
 
-The extension intentionally acts as a **view** rather than a controller.
-
-```text
-Python
-    │
-    └── "What should be displayed?"
-
-GNOME Extension
-    │
-    └── "Display it."
-```
-
-Keeping all business logic inside Python makes the extension extremely small,
-easy to maintain, and reusable. Any future desktop implementation (Waybar,
-KDE Plasma, XFCE, etc.) only needs to read the same status file without
-changing the core application.
-
-# Home Assistant Integration
-
-The Home Assistant package implements the **screen time policy** independently of the Linux client.
-
-Rather than relying on Home Assistant's `timer` integration, it maintains a persistent **computer time wallet** for each child.
-
-### Design
-
-Each child has three persistent helpers:
-
-- `input_boolean` — whether the countdown is currently running
-- `input_datetime` — when the current session started
-- `input_number` — remaining allowance in seconds
-
-While the countdown is active, the remaining time is calculated dynamically as:
-
-```
-remaining = remaining_base - (now - started)
-```
-
-The stored helper is only updated when the session is paused, rewarded, or reset—not every second. This minimizes database writes while keeping the displayed countdown live.
-
-### Features
-
-The package provides:
-
-- automatic start/pause of the countdown based on desktop activity
-- configurable application exemptions (e.g. educational software)
-- reward mechanisms for learning achievements
-- daily allowance reset
-- live remaining-time sensor for dashboards
-- reusable scripts for starting, pausing, rewarding, and resetting computer time
-
-### Desktop Session
-
-The package expects a `sensor.desktop_session` entity to be available.
-
-This entity is provided by the accompanying Python service and contains information such as:
-
-- logged-in user
-- idle state
-- active application
-- active window title
-
-The automations use these attributes to determine whether computer time should currently be consumed.
-
-### Extending
-
-Supporting additional children is straightforward:
-
-1. Create another set of helpers (`input_boolean`, `input_datetime`, `input_number`).
-2. Duplicate the template sensors.
-3. Add the child's automations.
-4. Configure the Python daemon to monitor the new user.
-
-The package is intentionally modular so the Home Assistant logic remains independent of the Linux implementation.
-
-
-# 🚀 Installation & Setup
-
-### Prerequisites
-Make sure you have Python (version 3.12+) installed and are running a GNOME-based Linux distribution (such as Ubuntu/Edubuntu).
+See **`docs/installation.md`** for a complete installation guide.
 
 ---
 
-### 1. General Setup & Python Backend
+## License
 
-1. **Clone the repository and enter the directory:**
-   ```bash
-   cd /srv/venv/ha_tray/screen_time_manager
-   ```
-
-2. **Install the required Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure the application:**
-   Copy the template configuration file to create your active configuration:
-   ```bash
-   cp config_template.json config.json
-   ```
-   Open `config.json` in your text editor and fill in your Home Assistant URL, Long-Lived Access Token (LLAT), and your desired limits/entity configurations.
-
----
-
-### 2. Run as a Systemd Service
-
-To ensure the screen time daemon starts automatically when you log into your Linux computer, set it up as a user-level systemd service.
-
-1. **Create the user systemd service directory (if it doesn't exist):**
-   ```bash
-   mkdir -p ~/.config/systemd/user/
-   ```
-
-2. **Create a service file:**
-   Create a file named `~/.config/systemd/user/screentime.service` and add the following content:
-   ```ini
-   [Unit]
-   Description=Screen Time Manager Daemon
-   After=network.target
-
-   [Service]
-   Type=simple
-   WorkingDirectory=/srv/venv/ha_tray/screen_time_manager
-   ExecStart=/usr/bin/python3 /srv/venv/ha_tray/screen_time_manager/main.py
-   Restart=on-failure
-
-   [Install]
-   WantedBy=default.target
-   ```
-   *(Ensure `/usr/bin/python3` points to your correct Python installation or virtual environment binary).*
-
-3. **Enable and start the service:**
-   ```bash
-   systemctl --user daemon-reload
-   systemctl --user enable screentime.service
-   systemctl --user start screentime.service
-   ```
-
-4. **Verify it is running:**
-   ```bash
-   systemctl --user status screentime.service
-   ```
-
----
-
-### 3. Install the GNOME Shell Extension
-
-The visual status indicator is packaged inside the repository under the `user/` directory layout.
-
-1. **Copy the extension directory to your local GNOME extensions directory:**
-   ```bash
-   mkdir -p ~/.local/share/gnome-shell/extensions/
-   cp -r user/.local/share/gnome-shell/extensions/ha-monitor@local ~/.local/share/gnome-shell/extensions/
-   ```
-
-2. **Restart GNOME Shell:**
-   * **Under X11:** Press `Alt` + `F2`, type `r`, and press `Enter`.
-   * **Under Wayland:** Log out of your desktop session and log back in.
-
-3. **Enable the Extension:**
-   Open your terminal and enable it directly:
-   ```bash
-   gnome-extensions enable ha-monitor@local
-   ```
-   *(Alternatively, you can manage and turn it on using the **Extensions** or **Extension Manager** graphical application).*
-
----
-
-## ⚙️ Configuration File (`config.json`)
-
-Ensure your `config.json` resembles the parameters defined in `config_template.json`:
-
-```json
-{
-  "homeassistant_url": "http://YOUR_HA_IP:8123",
-  "token": "YOUR_LONG_LIVED_ACCESS_TOKEN",
-  "update_interval": 10
-}
-```
-
-## 📄 License
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License.
