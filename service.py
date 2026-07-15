@@ -219,6 +219,8 @@ def discover_session() -> Session:
         session["uid"],
     )
 
+    logger.info("Focused window: %r", window)
+
     return Session(
         interactive_session=True,
         user=session["user"],
