@@ -49,7 +49,16 @@ def main():
 
                 if workers is not None:
 
-                    logger.info("Desktop session ended.")
+                    if not session.interactive_session:
+                    
+                        logger.info("No interactive desktop session.")
+                    
+                    elif session.user not in config.users:
+                    
+                        logger.info(
+                            "Ignoring unconfigured user '%s'",
+                            session.user,
+                        )
 
                     workers["stop"].set()
                     workers["ws"].close()
