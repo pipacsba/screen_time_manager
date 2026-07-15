@@ -61,12 +61,22 @@ def main():
                 time.sleep(main_loop_cycle_time)
                 continue
 
-            # check if user is monitored
+            #
+            # User not monitored
+            #
             if session.user not in config.users:
-                logger.info(
-                    "Ignoring unconfigured user '%s'",
-                    session.user,
-                )
+            
+                if workers is not None:
+                    logger.info("Stopping workers for %s", current_user)
+            
+                    workers["stop"].set()
+                    workers["ws"].close()
+            
+                    workers = None
+                    current_user = None
+            
+                logger.info("Ignoring unconfigured user '%s'", session.user)
+            
                 time.sleep(main_loop_cycle_time)
                 continue
             
