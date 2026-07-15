@@ -1,0 +1,618 @@
+###############################################################################
+# Computer Time Allowance
+#
+# This package implements a virtual "computer time wallet" for each child.
+#
+# Design:
+#   - The remaining allowance is stored in an input_number helper.
+#   - While the child is actively using the computer, the remaining time is
+#     calculated dynamically from:
+#
+#         remaining_base - (now - started)
+#
+#   - The helper is only updated when the session is paused, rewarded or reset.
+#     It is NOT updated every second.
+#
+# Advantages:
+#   - Survives Home Assistant restarts.
+#   - No dependence on the built-in timer integration.
+#   - Can freely add or remove time.
+#   - Easy to extend to additional children.
+#
+###############################################################################
+
+###############################################################################
+# Prerequisites
+#
+# This package expects the following entities to already exist:
+#
+#   sensor.rpi400_desktop_session
+#
+# exposing:
+#
+#   user
+#   idle
+#   app
+#   app_title
+#
+# The desktop_session sensor is provided by the accompanying
+# GNOME Shell extension and Python service.
+###############################################################################
+
+
+###############################################################################
+# INPUT HELPERS
+#
+# Persistent storage used by the computer time subsystem.
+###############################################################################
+
+# Indicates whether the child's computer allowance is currently counting down.
+#
+# ON  = countdown running
+# OFF = countdown paused
+input_boolean:
+  child1_computer_time_active:
+    name: child1 Computer Time Active
+  child2_computer_time_active:
+    name: child2 Computer Time Active
+
+# Timestamp when the current computer session started.
+#
+# Used together with the stored remaining allowance to calculate the live
+# remaining time.
+input_datetime:
+  child1_computer_time_started:
+    name: child1 Computer Time Started
+    has_date: true
+    has_time: true
+  child2_computer_time_started:
+    name: child2 Computer Time Started
+    has_date: true
+    has_time: true
+
+# Stored remaining allowance (seconds).
+#
+# This value is updated only when:
+#   - a session is paused
+#   - bonus time is awarded
+#   - the daily allowance is reset
+#
+# While the session is active, the live remaining time is calculated by the
+# template sensor instead of continuously updating this helper.
+input_number:
+  child1_computer_time_remaining_base:
+    name: child1 Computer Time Remaining
+    min: 0
+    max: 14400        # 4 hours
+    step: 1
+    mode: box
+    unit_of_measurement: s
+  child2_computer_time_remaining_base:
+    name: child2 Computer Time Remaining
+    min: 0
+    max: 14400        # 4 hours
+    step: 1
+    mode: box
+    unit_of_measurement: s
+
+###############################################################################
+# TEMPLATE ENTITIES
+#
+# Derived entities used by automations and the dashboard.
+###############################################################################
+template:
+
+  - binary_sensor:
+
+      # ---------------------------------------------------------------------------
+      # True whenever the currently focused application/window is exempt from
+      # consuming computer time.
+      #
+      # Rules are defined below.
+      # Every rule matches when ALL specified fields match.
+      #
+      # Examples:
+      #   - Educational websites
+      #   - Homework documents
+      #   - Learning terminal sessions
+      #
+      # Add new exemptions by appending another rule to the list.
+      # Exemption rules
+      #
+      # A rule matches when ALL specified fields match.
+      #
+      # Supported keys:
+      #   app
+      #   title_contains
+      #
+      # Examples:
+      #
+      # { "app": "chromium" }
+      #
+      #     Any Chromium window.
+      #
+      # { "app": "chromium", "title_contains": "Khan Academy" }
+      #
+      #     Only Chromium windows containing "Khan Academy" in the title.
+      #
+      # { "title_contains": "Homework" }
+      #
+      #     Any application whose title contains "Homework".
+      #
+      # Add new rules by appending another dictionary to the list.
+      # ---------------------------------------------------------------------------
+      
+      - name: Exempt Window
+        unique_id: exempt_window_001
+        icon: mdi:book-check
+        state: >
+          {% set app = state_attr("sensor.rpi400_desktop_session", "app") | default("none") %}
+          {% set title = state_attr("sensor.rpi400_desktop_session", "app_title") | default("none") %}
+
+          {# ---------------------------------------------------------------- #}
+          {# Exempt windows                                                   #}
+          {# A rule matches when ALL specified fields match.                  #}
+          {# ---------------------------------------------------------------- #}
+
+          {% set rules = [
+
+            {
+              "app": "tuxmath",
+            },
+
+            {
+              "app": "org.gnome.Epiphany",
+              "title_contains": "Duolingo"
+            },
+
+          ] %}
+
+          {% set ns = namespace(match=false) %}
+
+          {% for rule in rules %}
+            {% set app_ok =
+              rule.app is not defined
+              or app == rule.app
+            %}
+
+            {% set title_ok =
+              rule.title_contains is not defined
+              or rule.title_contains in title
+            %}
+
+            {% if app_ok and title_ok %}
+              {% set ns.match = true %}
+            {% endif %}
+          {% endfor %}
+
+          {{ ns.match }}
+          
+      # True when the specified child is currently logged in and actively using the
+      # computer.
+      #
+      # Requirements:
+      #   - logged-in user matches
+      #   - session is not idle
+      - name: child1 Active Computer Session
+        unique_id: child1_active_computer_session_001
+        state: >
+          {{
+            (state_attr("sensor.rpi400_desktop_session", "user") | default("none")) == 'child1'
+            and not (state_attr("sensor.rpi400_desktop_session", "idle") | default(True))
+          }}
+      - name: child2 Active Computer Session
+        unique_id: child2_active_computer_session_001
+        state: >
+          {{
+            (state_attr("sensor.rpi400_desktop_session", "user") | default("none")) == 'child2'
+            and not (state_attr("sensor.rpi400_desktop_session", "idle") | default(True))
+          }}
+
+  - sensor:
+  
+      # Live remaining computer allowance.
+      #
+      # When inactive:
+      #     equals the stored helper value.
+      #
+      # When active:
+      #     remaining_base - elapsed_session_time
+      #
+      # This sensor updates automatically because it references now().
+      #
+      # The helper stores the persistent state.
+      # This sensor presents the live countdown.
+      - name: child1 Computer Time Remaining
+        unique_id: child1_computer_time_remaining
+        unit_of_measurement: s
+
+        state: >
+          {% set remaining = states('input_number.child1_computer_time_remaining_base')|int(0) %}
+          {% set active = is_state('input_boolean.child1_computer_time_active','on') %}
+
+          {% if not active %}
+            {{ remaining }}
+          {% else %}
+            {% set started =
+                as_timestamp(states('input_datetime.child1_computer_time_started'), 0) | int %}
+            {% set elapsed = now().timestamp()|int - started %}
+            {{ [remaining - elapsed, 0] | max }}
+          {% endif %}
+
+        attributes:
+          # Human-readable HH:MM:SS representation of the remaining allowance.
+          formatted: >
+            {% set s = this.state|int(0) %}
+            {{ "%02d:%02d:%02d"|format(s//3600, (s%3600)//60, s%60) }}
+          # Shows if the user is active on the computer
+          active: "{{ is_state('input_boolean.child1_computer_time_active','on') }}"
+          
+      - name: child2 Computer Time Remaining
+        unique_id: child2_computer_time_remaining
+        unit_of_measurement: s
+
+        state: >
+          {% set remaining = states('input_number.child2_computer_time_remaining_base')|int(0) %}
+          {% set active = is_state('input_boolean.child2_computer_time_active','on') %}
+
+          {% if not active %}
+            {{ remaining }}
+          {% else %}
+            {% set started =
+                as_timestamp(states('input_datetime.child2_computer_time_started'), 0) | int %}
+            {% set elapsed = now().timestamp()|int - started %}
+            {{ [remaining - elapsed, 0] | max }}
+          {% endif %}
+
+        attributes:
+          # Human-readable HH:MM:SS representation of the remaining allowance.
+          formatted: >
+            {% set s = this.state|int(0) %}
+            {{ "%02d:%02d:%02d"|format(s//3600, (s%3600)//60, s%60) }}
+          # Shows if the user is active on the computer
+          active: "{{ is_state('input_boolean.child2_computer_time_active','on') }}"
+
+###############################################################################
+# SCRIPTS
+#
+# Generic computer-time state machine.
+#
+# All scripts accept the child name and operate on the corresponding helpers.
+###############################################################################
+script:
+   # Starts consuming computer allowance.
+   #
+   # Preconditions:
+   #   - remaining allowance > 0
+   #   - countdown not already running
+   #
+   # Actions:
+   #   - marks allowance as active
+   #   - records session start timestamp
+   computer_time_start:
+     fields:
+      user:
+        required: true
+     sequence:
+      #- condition: template
+      #  value_template: "{{ (states('input_number.' + user + '_computer_time_remaining_base')) | int(0) > 0 }}"
+
+      - condition: template
+        value_template: "{{ is_state('input_boolean.' + user +'_computer_time_active', 'off') }}"
+
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "{{'input_boolean.' + user + '_computer_time_active'}}"
+
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "{{'input_datetime.' + user + '_computer_time_started' }}"
+        data:
+          datetime: "{{ now().isoformat() }}"
+          
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ 'input_number.' + user + '_computer_time_remaining_base' }}"
+        data:
+          value: >
+            {% set max = state_attr(
+                'input_number.' + user + '_computer_time_remaining_base',
+                'max'
+            ) | int %}
+    
+            {{
+              [
+                states('input_number.' + user + '_computer_time_remaining_base') | int + 1,
+                max
+              ] | min
+            }}
+
+
+   # Stops consuming computer allowance.
+   #
+   # Calculates elapsed time since the session started and permanently stores the
+   # updated remaining allowance.
+   #
+   # This script is called whenever:
+   #   - the child logs out
+   #   - the session becomes idle
+   #   - an exempt application becomes active
+   computer_time_pause:
+     fields:
+      user:
+        required: true
+     sequence:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.' + user +'_computer_time_active', 'on') }}"
+
+      - variables:
+          remaining: >
+            {{ states('input_number.' + user + '_computer_time_remaining_base')|int }}
+
+          started: >
+            {{ as_timestamp(states('input_datetime.' + user + '_computer_time_started'))|int }}
+
+          elapsed: >
+            {{ now().timestamp()|int - started }}
+
+          new_remaining: >
+            {{ [remaining-elapsed,0]|max }}
+
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ 'input_number.' + user + '_computer_time_remaining_base' }}"
+        data:
+          value: "{{ new_remaining }}"
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ 'input_boolean.' + user + '_computer_time_active' }}"
+
+   # Adds bonus computer time.
+   #
+   # The allowance is capped at the helper's configured maximum.
+   #
+   # Bonus time may be awarded while the countdown is active or paused.
+   computer_time_reward:
+     fields:
+      seconds:
+        required: true
+      user:
+        required: true
+     sequence:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ 'input_number.' + user + '_computer_time_remaining_base' }}"
+        data:
+          value: >
+            {% set max = state_attr('input_number.' + user + '_computer_time_remaining_base','max')|int %}
+            
+            {{ [
+                  states('input_number.' + user + '_computer_time_remaining_base')|int
+                  + seconds|int,
+                  max
+               ] | min }}
+
+   # Performs the daily allowance reset.
+   #
+   # Actions:
+   #   - pauses any active countdown
+   #   - restores the daily allowance
+   #   - resets the session timestamp
+   computer_time_reset:
+     fields:
+      user:
+        required: true
+     sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ 'input_boolean.' + user + '_computer_time_active' }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ 'input_number.' + user + '_computer_time_remaining_base' }}"
+        data:
+          value: 600
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "{{ 'input_datetime.' + user + '_computer_time_started' }}"
+        data:
+          datetime: "{{ now().isoformat() }}"
+
+###############################################################################
+# AUTOMATIONS
+###############################################################################
+automation computer_time_rules:
+  # Controls whether the child's computer allowance is counting down.
+  #
+  # Countdown starts only when:
+  #   - the child is actively using the computer
+  #   - the current window is NOT exempt
+  #   - remaining allowance is available
+  #
+  # Otherwise the countdown is paused.
+  - alias: child1 Computer Timer
+    id: child1_computer_timer_0001 
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.child1_active_computer_session
+          - binary_sensor.exempt_window
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.child1_active_computer_session
+                state: "on"
+    
+              - condition: state
+                entity_id: binary_sensor.exempt_window
+                state: "off"
+
+              # let the other side decide what to do when time is 0
+              #- condition: numeric_state
+              #  entity_id: input_number.child1_computer_time_remaining_base
+              #  above: 0
+    
+            sequence:
+              - action: script.computer_time_start
+                data:
+                  user: "child1"
+
+        default:
+          - action: script.computer_time_pause
+            data:
+              user: "child1"
+          
+  - alias: child2 Computer Timer
+    id: child2_computer_timer_0001 
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.child2_active_computer_session
+          - binary_sensor.exempt_window
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.child2_active_computer_session
+                state: "on"
+    
+              - condition: state
+                entity_id: binary_sensor.exempt_window
+                state: "off"
+
+              # let the other side decide what to do when time is 0
+              #- condition: numeric_state
+              #  entity_id: input_number.child2_computer_time_remaining_base
+              #  above: 0
+    
+            sequence:
+              - action: script.computer_time_start
+                data:
+                  user: "child2"
+
+        default:
+          - action: script.computer_time_pause
+            data:
+              user: "child2"
+
+  # Awards bonus computer time for completed educational activities.
+  #
+  # Each monitored sensor defines:
+  #   - minimum increase required
+  #   - reward (minutes)
+  #
+  # Only increases larger than the configured threshold receive a reward,
+  # preventing duplicate or insignificant updates.
+  - alias: child1 - Additional Computer Time
+    id: child1_additional_computer_time_001
+
+    mode: queued
+
+    variables:
+      thresholds:
+        sensor.study_edubuntu_bash_child1_mathtux_missions:
+          threshold: 0
+          reward: 10
+        sensor.duolingo_xp:
+          threshold: 10
+          reward: 15
+
+    triggers:
+      - trigger: state
+        entity_id:
+          - sensor.study_edubuntu_bash_child1_mathtux_missions
+          - sensor.duolingo_xp
+
+    actions:
+      - variables:
+          valid_change: >
+            {{ is_number(trigger.from_state.state)
+               and is_number(trigger.to_state.state) }}
+
+          delta: >
+            {% if valid_change %}
+              {{ trigger.to_state.state | int - trigger.from_state.state | int }}
+            {% else %}
+              0
+            {% endif %}
+
+          threshold: >
+            {{ thresholds.get(trigger.entity_id, {}).get('threshold', 999999) }}
+
+          reward: >
+            {{ thresholds.get(trigger.entity_id, {}).get('reward', 0) }}
+
+      - condition: template
+        value_template: >
+          {{ delta > threshold }}
+
+      - action: script.computer_time_reward
+        data:
+          seconds: "{{ reward * 60 }}"
+          user: "child1"
+
+  - alias: child2 - Additional Computer Time
+    id: child2_additional_computer_time_001
+
+    mode: queued
+
+    variables:
+      thresholds:
+        sensor.study_edubuntu_bash_child2_mathtux_missions:
+          threshold: 0
+          reward: 10
+
+    triggers:
+      - trigger: state
+        entity_id:
+          - sensor.study_edubuntu_bash_child2_mathtux_missions
+    actions:
+      - variables:
+          valid_change: >
+            {{ is_number(trigger.from_state.state)
+               and is_number(trigger.to_state.state) }}
+
+          delta: >
+            {% if valid_change %}
+              {{ trigger.to_state.state | int - trigger.from_state.state | int }}
+            {% else %}
+              0
+            {% endif %}
+
+          threshold: >
+            {{ thresholds.get(trigger.entity_id, {}).get('threshold', 999999) }}
+
+          reward: >
+            {{ thresholds.get(trigger.entity_id, {}).get('reward', 0) }}
+
+      - condition: template
+        value_template: >
+          {{ delta > threshold }}
+
+      - action: script.computer_time_reward
+        data:
+          seconds: "{{ reward * 60 }}"
+          user: "child2"
+
+  # Restores each child's daily computer allowance.
+  #
+  # Executed once per day shortly after midnight.
+  #
+  # Existing sessions are terminated before the allowance is reset.
+  - alias:  Computer Timer Daily Reset
+    id: computer_time_reset_001
+    mode: single  
+    triggers:
+      - trigger: time
+        at: "00:00:01"
+
+    actions:
+      - action: script.computer_time_reset
+        data:
+          user: "child1"
+      - action: script.computer_time_reset
+        data:
+          user: "child2"
