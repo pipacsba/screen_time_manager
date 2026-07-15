@@ -149,6 +149,7 @@ def get_active_session():
             continue
 
         session_id = parts[0]
+        uid = int(parts[1])
         user = parts[2]
         seat = parts[3]
 
@@ -174,17 +175,6 @@ def get_active_session():
 
         if idle != "no":
             continue
-
-        uid = int(parts[1])
-        
-        #uid = int(
-        #    subprocess.run(
-        #        ["id", "-u", user],
-        #        capture_output=True,
-        #        text=True,
-        #        check=True,
-        #    ).stdout.strip()
-        #)
 
         bus = Path(f"/run/user/{uid}/bus")
 
