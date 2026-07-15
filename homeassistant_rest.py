@@ -96,6 +96,8 @@ class HomeAssistantRestClient:
         started = datetime.fromisoformat(
             self._get_state(self.user.started_entity)
         )
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=tzlocal())
 
         remaining = int(
             float(
