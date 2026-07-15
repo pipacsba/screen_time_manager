@@ -163,7 +163,7 @@ class HomeAssistantPublisher:
         Empty strings are used instead of None so the entity always has
         stable attribute types.
         """
-
+        logger.info("Published desktop state %s", session)
         try:
 
             payload = {
