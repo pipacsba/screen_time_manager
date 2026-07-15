@@ -78,10 +78,10 @@ def focused_window(user: str, uid: int) -> dict:
     try:
         result = subprocess.run(
             [
-                "runuser",
-                "-u",
-                user,
-                "--",
+                "setpriv",
+                f"--reuid={uid}",
+                f"--regid={gid}",
+                "--clear-groups",
                 "gdbus",
                 "call",
                 "--session",
