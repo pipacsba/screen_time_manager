@@ -1,4 +1,4 @@
----
+
 # HA Screen Time Monitor
 
 ## Overview
