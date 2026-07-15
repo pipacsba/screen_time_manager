@@ -1,4 +1,4 @@
-# Screen Time Manager[cite: 1]
+# Screen Time Manager
 
 An automated screen time tracking and management utility for Linux systems. This application monitors user active session states and communicates screen time limits, statuses, and countdowns directly with **Home Assistant** while displaying a status indicator in the GNOME desktop panel.
 
@@ -12,7 +12,7 @@ By running a background service that watches local session states, the system pu
 
 ---
 
-## 🏗️ Architecture[cite: 1]
+## 🏗️ Architecture
 
 The application is split into two primary layers: a system-level tracking daemon and a desktop-level visual indicator.
 
@@ -34,7 +34,7 @@ The application is split into two primary layers: a system-level tracking daemon
  └─────────────────────────────────────────────────────────┘
 ```
 
-### Components[cite: 1]:
+### Components:
 *   **Python Backend Daemon (`main.py`):** Runs persistently in the background as a user-level `systemd` service[cite: 1]. It tracks local active sessions, manages countdown timers, and syncs status updates.
 *   **Home Assistant Connectors (`homeassistant_ws.py` & `homeassistant_rest.py`):** Maintain active connections to your Home Assistant instance, allowing bi-directional state tracking and automation triggers[cite: 1].
 *   **GNOME Shell Extension (`ha-monitor@local`):** Displays a live, lightweight status indicator directly in the top panel bar of your GNOME desktop environment[cite: 1].
@@ -518,14 +518,14 @@ Future desktop integrations (e.g. KDE Plasma or another desktop environment)
 could implement the same simple interface without requiring changes to the rest
 of the system.
 
-# 🚀 Installation & Setup[cite: 1]
+# 🚀 Installation & Setup
 
 ### Prerequisites
 Make sure you have Python (version 3.12+) installed and are running a GNOME-based Linux distribution (such as Ubuntu/Edubuntu).
 
 ---
 
-### 1. General Setup & Python Backend[cite: 1]
+### 1. General Setup & Python Backend
 
 1. **Clone the repository and enter the directory:**
    ```bash
@@ -538,7 +538,7 @@ Make sure you have Python (version 3.12+) installed and are running a GNOME-base
    ```
 
 3. **Configure the application:**
-   Copy the template configuration file to create your active configuration[cite: 1]:
+   Copy the template configuration file to create your active configuration:
    ```bash
    cp config_template.json config.json
    ```
@@ -546,7 +546,7 @@ Make sure you have Python (version 3.12+) installed and are running a GNOME-base
 
 ---
 
-### 2. Run as a Systemd Service[cite: 1]
+### 2. Run as a Systemd Service
 
 To ensure the screen time daemon starts automatically when you log into your Linux computer, set it up as a user-level systemd service.
 
@@ -587,11 +587,11 @@ To ensure the screen time daemon starts automatically when you log into your Lin
 
 ---
 
-### 3. Install the GNOME Shell Extension[cite: 1]
+### 3. Install the GNOME Shell Extension
 
-The visual status indicator is packaged inside the repository under the `user/` directory layout[cite: 1].
+The visual status indicator is packaged inside the repository under the `user/` directory layout.
 
-1. **Copy the extension directory to your local GNOME extensions directory[cite: 1]:**
+1. **Copy the extension directory to your local GNOME extensions directory:**
    ```bash
    mkdir -p ~/.local/share/gnome-shell/extensions/
    cp -r user/.local/share/gnome-shell/extensions/ha-monitor@local ~/.local/share/gnome-shell/extensions/
@@ -610,9 +610,9 @@ The visual status indicator is packaged inside the repository under the `user/` 
 
 ---
 
-## ⚙️ Configuration File (`config.json`)[cite: 1]
+## ⚙️ Configuration File (`config.json`)
 
-Ensure your `config.json` resembles the parameters defined in `config_template.json`[cite: 1]:
+Ensure your `config.json` resembles the parameters defined in `config_template.json`:
 
 ```json
 {
@@ -622,5 +622,5 @@ Ensure your `config.json` resembles the parameters defined in `config_template.j
 }
 ```
 
-## 📄 License[cite: 1]
-This project is licensed under the [MIT License](LICENSE)[cite: 1].
+## 📄 License
+This project is licensed under the [MIT License](LICENSE).
