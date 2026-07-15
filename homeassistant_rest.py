@@ -1,20 +1,44 @@
 # homeassistant_rest.py
+#
+# Home Assistant REST API client.
+#
+# This module contains two independent REST clients:
+#
+#   HomeAssistantRestClient
+#       Periodically downloads the current computer-time state
+#       (active, started timestamp, remaining seconds) from
+#       Home Assistant into the shared model.
+#
+#   HomeAssistantPublisher
+#       Publishes the currently active desktop session
+#       (logged-in user, focused application, idle state, ...)
+#       as a Home Assistant entity so automations can react
+#       to desktop activity.
+#
 
-import time
 from datetime import datetime
+import logging
 
 import requests
 import urllib3
 
-import logging
-
 logger = logging.getLogger(__name__)
 
-# Allow self-signed certificates
+#
+# Home Assistant commonly uses self-signed certificates in
+# private networks. Suppress the resulting HTTPS warnings.
+#
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class HomeAssistantRestClient:
+    """
+    Periodically synchronizes the computer-time model from
+    Home Assistant using the REST API.
+
+    This acts as a safety net in case WebSocket events are missed
+    and also provides the initial bootstrap values after login.
+    """
 
     def __init__(self, model, config, session, stop_event):
 
@@ -23,10 +47,16 @@ class HomeAssistantRestClient:
         self.session = session
         self.stop_event = stop_event
 
+        #
+        # Configuration for the currently logged-in user.
+        #
         self.user = config.users[session.user]
 
         self.base_url = config.ha_rest_url.rstrip("/")
 
+        #
+        # Reuse one HTTP session for all requests.
+        #
         self.http = requests.Session()
         self.http.verify = False
         self.http.headers.update({
@@ -35,13 +65,12 @@ class HomeAssistantRestClient:
         })
 
     # --------------------------------------------------------------
-    # Public
+    # Main polling loop
     # --------------------------------------------------------------
 
     def run(self):
 
         while not self.stop_event.is_set():
-
 
             try:
                 self._refresh()
@@ -53,10 +82,14 @@ class HomeAssistantRestClient:
                 break
 
     # --------------------------------------------------------------
-    # Internal
+    # Internal helpers
     # --------------------------------------------------------------
 
     def _refresh(self):
+        """
+        Download the latest computer-time state from Home Assistant
+        and update the shared model.
+        """
 
         active = self._get_state(self.user.active_entity) == "on"
 
@@ -82,8 +115,11 @@ class HomeAssistantRestClient:
             started,
             remaining,
         )
-        
+
     def _get_state(self, entity_id):
+        """
+        Read the state value of a single Home Assistant entity.
+        """
 
         response = self.http.get(
             f"{self.base_url}/states/{entity_id}",
@@ -95,8 +131,14 @@ class HomeAssistantRestClient:
         return response.json()["state"]
 
 
-
 class HomeAssistantPublisher:
+    """
+    Publishes the currently active desktop session to Home Assistant.
+
+    Unlike HomeAssistantRestClient, this class does not run in its own
+    thread. The main loop calls publish_desktop_state() whenever the
+    detected desktop session changes.
+    """
 
     def __init__(self, config):
 
@@ -111,17 +153,25 @@ class HomeAssistantPublisher:
         })
 
     def publish_desktop_state(self, session):
+        """
+        Publish the current desktop session as a Home Assistant entity.
+
+        Empty strings are used instead of None so the entity always has
+        stable attribute types.
+        """
+
         try:
+
             payload = {
                 "state": "active" if session.interactive_session else "inactive",
                 "attributes": {
                     "interactive_session": session.interactive_session,
-                    "user": session.user if session.user else "", # Safe fallback
-                    "uid": session.uid if session.uid else 0,
-                    "session": session.session if session.session else "",
+                    "user": session.user or "",
+                    "uid": session.uid or 0,
+                    "session": session.session or "",
                     "idle": session.idle,
-                    "app": session.app if session.app else "",
-                    "app_title": session.app_title if session.app_title else "",
+                    "app": session.app or "",
+                    "app_title": session.app_title or "",
                 },
             }
 
@@ -130,6 +180,7 @@ class HomeAssistantPublisher:
                 json=payload,
                 timeout=5,
             )
+
             response.raise_for_status()
 
             logger.info(
