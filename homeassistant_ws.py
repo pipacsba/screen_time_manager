@@ -204,8 +204,9 @@ class HomeAssistantClient:
             self.model.bootstrap = False
 
         logger.info(
-            "Synced: active=%s started=%s remaining=%s",
+            "Synced: active=%s started=%s (tz=%r) remaining=%s",
             self.model.active,
             self.model.started,
+            self.model.started.tzinfo,
             self.model.remaining_base,
         )
