@@ -16,6 +16,8 @@ import logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+main_loop_cycle_time = 2
+
 def main():
 
     config = load_config()
@@ -56,9 +58,18 @@ def main():
                     workers = None
                     current_user = None
 
-                time.sleep(2)
+                time.sleep(main_loop_cycle_time)
                 continue
 
+            # check if user is monitored
+            if session.user not in config.users:
+                logger.info(
+                    "Ignoring unconfigured user '%s'",
+                    session.user,
+                )
+                time.sleep(main_loop_cycle_time)
+                continue
+            
             #
             # User changed (or first login)
             #
@@ -126,7 +137,7 @@ def main():
 
                 current_user = session.user
 
-            time.sleep(2)
+            time.sleep(main_loop_cycle_time)
 
     except KeyboardInterrupt:
 
