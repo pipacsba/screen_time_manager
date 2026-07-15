@@ -1,4 +1,12 @@
 # service.py
+"""
+Discovers the currently active graphical desktop session.
+
+This module identifies the user currently interacting with the local
+desktop, ignoring SSH and other non-interactive sessions. It also
+retrieves information about the focused application from a GNOME Shell
+extension over the user's D-Bus session.
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Session:
+    """
+    Snapshot of the currently active desktop session.
+
+    When no interactive desktop session exists, only
+    `interactive_session` is False and all other fields are None.
+    """    
     interactive_session: bool
     user: Optional[str]
     uid: Optional[int]
@@ -25,6 +39,17 @@ class Session:
 
 
 def decode_gdbus_json(output: str) -> dict:
+    """
+    Decode the output returned by
+
+        gdbus call ...
+
+    which has the form
+
+        ('{ ...json... }',)
+
+    and return the embedded JSON object.
+    """    
     output = output.strip()
 
     if not output.startswith("('") or not output.endswith("',)"):
@@ -35,6 +60,10 @@ def decode_gdbus_json(output: str) -> dict:
 
 def focused_window(user: str, uid: int) -> dict:
     """
+    Query the GNOME Shell extension for the currently focused window.
+
+    The command must execute inside the user's desktop session so the
+    appropriate D-Bus environment variables are supplied.
     Returns:
         {
             "app": "...",
@@ -83,9 +112,15 @@ def focused_window(user: str, uid: int) -> dict:
 
 def get_active_session():
     """
-    Returns the currently active desktop session.
+    Locate the active local desktop session.
 
-    SSH sessions and other non-GNOME sessions are ignored.
+    Sessions are filtered to find the first one that
+
+      - belongs to a physical seat,
+      - is not idle, and
+      - owns a session D-Bus socket.
+
+    This excludes SSH and background sessions.
     """
 
     result = subprocess.run(
