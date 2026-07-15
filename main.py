@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 
 SESSION_POLL_INTERVAL  = 2
 
+def stop_workers(workers):
+
+    if workers is None:
+        return
+
+    workers["stop"].set()
+    workers["ws"].close()
+
+    for t in workers["threads"]:
+        t.join(timeout=2)
+
 def main():
 
     config = load_config()
@@ -60,12 +71,7 @@ def main():
                             session.user,
                         )
 
-                    workers["stop"].set()
-                    workers["ws"].close()
-
-                    for t in workers["threads"]:
-                        t.join(timeout=2)
-
+                    stop_workers(workers)
                     workers = None
                     current_user = None
 
@@ -80,9 +86,7 @@ def main():
                 if workers is not None:
 
                     logger.info("Stopping workers for %s", current_user)
-
-                    workers["stop"].set()
-                    workers["ws"].close()
+                    stop_workers(workers)
 
                 logger.info("Starting workers for %s", session.user)
 
