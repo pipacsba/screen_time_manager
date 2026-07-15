@@ -359,6 +359,165 @@ Everything else is thread-local.
 
 This keeps synchronization simple while allowing each worker to operate independently.
 
+# GNOME Shell Extension
+
+## Overview
+
+The GNOME Shell extension provides a small bridge between the desktop and the
+Python background service.
+
+Its only responsibility is to expose information about the currently focused
+window over D-Bus. The Python service queries this information periodically and
+publishes it to Home Assistant.
+
+Keeping the desktop-specific logic inside the extension keeps the Python code
+desktop-agnostic and avoids depending on GNOME Shell internals.
+
+---
+
+## Responsibilities
+
+The extension is responsible for:
+
+- Tracking the currently focused application.
+- Tracking the title of the active window.
+- Exposing this information over D-Bus.
+- Updating the exported data whenever the focused window changes.
+
+The extension is **not** responsible for:
+
+- Home Assistant communication.
+- Screen time calculations.
+- Waybar integration.
+- Session detection.
+- Business logic.
+
+---
+
+## Architecture
+
+```
+                    GNOME Shell
+                         │
+                         │ Window focus changes
+                         ▼
+                Extension JavaScript
+                         │
+                         │ Updates cached values
+                         ▼
+                  D-Bus Service
+org.gnome.shell.extensions.FocusedWindow
+                         ▲
+                         │
+                         │ gdbus call
+                         │
+                  Python service
+```
+
+---
+
+## D-Bus API
+
+The extension exports a single method:
+
+```
+Get()
+```
+
+which returns a JSON object similar to:
+
+```json
+{
+  "app": "firefox",
+  "title": "Home Assistant Dashboard"
+}
+```
+
+The JSON is wrapped by `gdbus` as a D-Bus string, so the Python service removes
+the wrapper before parsing it.
+
+---
+
+## Event Flow
+
+```
+User changes window
+        │
+        ▼
+GNOME Shell notifies extension
+        │
+        ▼
+Extension updates internal state
+        │
+        ▼
+Python polls Get()
+        │
+        ▼
+Desktop state published to Home Assistant
+```
+
+---
+
+## Why D-Bus?
+
+Using D-Bus has several advantages:
+
+- No files need to be written.
+- No polling inside the extension.
+- The extension remains completely isolated from Home Assistant.
+- Python can request information only when needed.
+- Multiple clients could consume the same API in the future.
+
+---
+
+## Separation of Responsibilities
+
+### JavaScript (GNOME Shell)
+
+Responsible for:
+
+- interacting with GNOME Shell APIs
+- detecting focused windows
+- exporting information via D-Bus
+
+### Python
+
+Responsible for:
+
+- discovering active desktop sessions
+- querying the D-Bus service
+- publishing desktop state to Home Assistant
+- synchronizing screen-time data
+- updating Waybar
+
+---
+
+## Design Philosophy
+
+The extension intentionally remains very small.
+
+It acts purely as a **desktop information provider**, while all business logic
+lives in Python. This separation makes each component easier to understand,
+test, and maintain.
+
+```
+GNOME Shell
+    │
+    └── "What window is active?"
+
+Python
+    │
+    └── "What should I do with that information?"
+
+Home Assistant
+    │
+    └── "Automate based on the published state."
+```
+
+Future desktop integrations (e.g. KDE Plasma or another desktop environment)
+could implement the same simple interface without requiring changes to the rest
+of the system.
+
 # 🚀 Installation & Setup[cite: 1]
 
 ### Prerequisites
