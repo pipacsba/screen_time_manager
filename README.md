@@ -518,6 +518,64 @@ Future desktop integrations (e.g. KDE Plasma or another desktop environment)
 could implement the same simple interface without requiring changes to the rest
 of the system.
 
+# Home Assistant Integration
+
+The Home Assistant package implements the **screen time policy** independently of the Linux client.
+
+Rather than relying on Home Assistant's `timer` integration, it maintains a persistent **computer time wallet** for each child.
+
+### Design
+
+Each child has three persistent helpers:
+
+- `input_boolean` — whether the countdown is currently running
+- `input_datetime` — when the current session started
+- `input_number` — remaining allowance in seconds
+
+While the countdown is active, the remaining time is calculated dynamically as:
+
+```
+remaining = remaining_base - (now - started)
+```
+
+The stored helper is only updated when the session is paused, rewarded, or reset—not every second. This minimizes database writes while keeping the displayed countdown live.
+
+### Features
+
+The package provides:
+
+- automatic start/pause of the countdown based on desktop activity
+- configurable application exemptions (e.g. educational software)
+- reward mechanisms for learning achievements
+- daily allowance reset
+- live remaining-time sensor for dashboards
+- reusable scripts for starting, pausing, rewarding, and resetting computer time
+
+### Desktop Session
+
+The package expects a `sensor.desktop_session` entity to be available.
+
+This entity is provided by the accompanying Python service and contains information such as:
+
+- logged-in user
+- idle state
+- active application
+- active window title
+
+The automations use these attributes to determine whether computer time should currently be consumed.
+
+### Extending
+
+Supporting additional children is straightforward:
+
+1. Create another set of helpers (`input_boolean`, `input_datetime`, `input_number`).
+2. Duplicate the template sensors.
+3. Add the child's automations.
+4. Configure the Python daemon to monitor the new user.
+
+The package is intentionally modular so the Home Assistant logic remains independent of the Linux implementation.
+
+
 # 🚀 Installation & Setup
 
 ### Prerequisites
