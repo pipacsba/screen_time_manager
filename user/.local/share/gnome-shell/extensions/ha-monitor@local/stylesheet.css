@@ -1,0 +1,26 @@
+/* =========================
+   HA Monitor Status Colors
+   GNOME Theme Safe
+   ========================= */
+
+/* Base styling (inherits GNOME panel text color automatically) */
+.ha-green,
+.ha-yellow,
+.ha-red {
+    font-weight: 600;
+}
+
+/* OK / plenty of time */
+.ha-green {
+    color: #7bd88f;
+}
+
+/* Warning */
+.ha-yellow {
+    color: #ffd75f;
+}
+
+/* Critical */
+.ha-red {
+    color: #ff6b6b;
+}

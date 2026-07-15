@@ -1,0 +1,7 @@
+{
+  "uuid": "ha-monitor@local",
+  "name": "HA Monitor",
+  "description": "Shows computer time from Home Assistant",
+  "shell-version": ["45", "46"],
+  "version": 1
+}
