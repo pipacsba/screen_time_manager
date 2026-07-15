@@ -15,6 +15,31 @@ Its primary purpose is to:
 The application is designed as a long-running **systemd service** that continuously follows the currently active graphical user session.
 
 
+## Why this project?
+
+Most parental-control solutions are designed as isolated systems: they enforce time limits locally, but offer little flexibility for automation or integration with the rest of the home.
+
+This project takes a different approach by making **Home Assistant the single source of truth** for screen time management.
+
+The Linux client is intentionally lightweight. It is responsible only for:
+
+- detecting the active desktop session,
+- displaying the remaining time to the user,
+- enforcing the configured limit locally, and
+- synchronizing state with Home Assistant.
+
+All policy decisions—such as when time should be consumed, which applications are exempt, how bonus time is earned, and when daily allowances are reset—are implemented entirely in Home Assistant.
+
+This separation has several advantages:
+
+- **Flexible automation** – screen time can depend on presence, schedules, homework, or any other Home Assistant entity.
+- **Reward-based learning** – educational activities can automatically grant additional computer time.
+- **Persistence** – remaining allowance survives reboots and Home Assistant restarts.
+- **Transparency** – parents can monitor the current state from Home Assistant dashboards.
+- **Extensibility** – additional users, applications, or automation rules can be added without modifying the Linux client.
+
+The result is a modular architecture where the desktop application focuses solely on interacting with the operating system, while Home Assistant defines the screen-time policy.
+
 ---
 
 # High-Level Architecture
