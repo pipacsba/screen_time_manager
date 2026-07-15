@@ -1,7 +1,20 @@
-# config.py
+#
+# Configuration loader
+#
+# Reads config.json and converts it into strongly typed dataclasses.
+#
+# The configuration consists of:
+#
+#   - Home Assistant connection settings
+#   - Desktop state entity used by the system service
+#   - Per-user Home Assistant entities used for screen-time monitoring
+#
+# Unlike earlier versions, this service runs system-wide, so it loads the
+# configuration for all monitored users. The active desktop session is
+# determined at runtime, and the appropriate UserConfig is selected later.
+#
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
@@ -9,14 +22,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class UserConfig:
+    """
+    Home Assistant entities belonging to one monitored desktop user.
+    """
+
     active_entity: str
     started_entity: str
     remaining_entity: str
 
+
 @dataclass
 class Config:
+    """
+    Complete application configuration loaded from config.json.
+    """
+
     ha_url: str
     ha_rest_url: str
     ha_poll_interval: int
@@ -25,20 +48,23 @@ class Config:
     users: Dict[str, UserConfig]
 
 
-path = Path(__file__).parent / "config.json"
+def load_config(path: str = "config.json") -> Config:
+    """
+    Load the application configuration from disk.
 
-def load_config(path="config.json") -> Config:
+    Returns:
+        Config object containing the global configuration and all configured
+        users.
+    """
 
     path = Path(__file__).parent / path
 
     if not path.exists():
-        logger.info(f"Config not found: {path}")
+        logger.error("Config not found: %s", path)
         raise FileNotFoundError(f"Config not found: {path}")
 
     data = json.loads(path.read_text(encoding="utf-8"))
 
-    #logger.info(data)
-    
     users = {
         username: UserConfig(
             active_entity=user["active_entity"],
@@ -56,4 +82,3 @@ def load_config(path="config.json") -> Config:
         token=data["token"],
         users=users,
     )
-    
