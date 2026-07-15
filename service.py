@@ -175,14 +175,16 @@ def get_active_session():
         if idle != "no":
             continue
 
-        uid = int(
-            subprocess.run(
-                ["id", "-u", user],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-        )
+        uid = int(parts[1])
+        
+        #uid = int(
+        #    subprocess.run(
+        #        ["id", "-u", user],
+        #        capture_output=True,
+        #        text=True,
+        #        check=True,
+        #    ).stdout.strip()
+        #)
 
         bus = Path(f"/run/user/{uid}/bus")
 
