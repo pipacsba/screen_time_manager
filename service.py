@@ -15,6 +15,8 @@ import json
 import os
 import logging
 from typing import Optional
+import pwd
+import grp
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,9 @@ def focused_window(user: str, uid: int) -> dict:
     env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
     env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path=/run/user/{uid}/bus"
 
+    pw = pwd.getpwnam(user)
+    gid = pw.pw_gid
+    
     try:
         result = subprocess.run(
             [
