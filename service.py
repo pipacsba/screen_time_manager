@@ -106,14 +106,26 @@ def focused_window(user: str, uid: int) -> dict:
 
         return decode_gdbus_json(result.stdout)
 
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "gdbus failed for %s:\nstdout=%s\nstderr=%s",
+            user,
+            e.stdout,
+            e.stderr,
+        )
+    
+        return {
+            "wm_class": None,
+            "title": None,
+        }
+    
     except Exception:
         logger.exception("Failed to obtain focused window for %s", user)
-
+    
         return {
-            "app": "unknown",
-            "title": "unknown",
+            "wm_class": None,
+            "title": None,
         }
-
 
 def get_active_session():
     """
