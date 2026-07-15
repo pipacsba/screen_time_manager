@@ -110,9 +110,10 @@ class HomeAssistantRestClient:
             self.model.bootstrap = False
 
         logger.info(
-            "REST sync: active=%s started=%s remaining=%s",
+            "REST sync: active=%s started=%s (tz=%r) remaining=%s",
             active,
             started,
+            started.tzinfo,
             remaining,
         )
 
