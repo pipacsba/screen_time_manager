@@ -16,7 +16,7 @@ import logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-main_loop_cycle_time = 2
+SESSION_POLL_INTERVAL  = 2
 
 def main():
 
@@ -45,39 +45,22 @@ def main():
             #
             # No active desktop session
             #
-            if not session.interactive_session:
+            if not session.interactive_session or session.user not in config.users:
 
                 if workers is not None:
 
                     logger.info("Desktop session ended.")
 
                     workers["stop"].set()
-
                     workers["ws"].close()
+
+                    for t in workers["threads"]:
+                        t.join(timeout=2)
 
                     workers = None
                     current_user = None
 
-                time.sleep(main_loop_cycle_time)
-                continue
-
-            #
-            # User not monitored
-            #
-            if session.user not in config.users:
-            
-                if workers is not None:
-                    logger.info("Stopping workers for %s", current_user)
-            
-                    workers["stop"].set()
-                    workers["ws"].close()
-            
-                    workers = None
-                    current_user = None
-            
-                logger.info("Ignoring unconfigured user '%s'", session.user)
-            
-                time.sleep(main_loop_cycle_time)
+                time.sleep(SESSION_POLL_INTERVAL)
                 continue
             
             #
@@ -147,7 +130,7 @@ def main():
 
                 current_user = session.user
 
-            time.sleep(main_loop_cycle_time)
+            time.sleep(SESSION_POLL_INTERVAL)
 
     except KeyboardInterrupt:
 
