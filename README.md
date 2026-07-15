@@ -40,8 +40,326 @@ The application is split into two primary layers: a system-level tracking daemon
 *   **GNOME Shell Extension (`ha-monitor@local`):** Displays a live, lightweight status indicator directly in the top panel bar of your GNOME desktop environment[cite: 1].
 
 ---
+# HA Screen Time Monitor
 
-## 🚀 Installation & Setup[cite: 1]
+## Overview
+
+HA Screen Time Monitor is a lightweight desktop companion for Home Assistant.
+
+Its primary purpose is to:
+
+- display the remaining computer time in the desktop status bar (Waybar),
+- keep the countdown synchronized with Home Assistant,
+- enforce the configured time limit by locking the desktop after a configurable grace period,
+- publish information about the active desktop session back to Home Assistant.
+
+The application is designed as a long-running **systemd service** that continuously follows the currently active graphical user session.
+
+
+---
+
+# High-Level Architecture
+
+```
+                  +----------------------+
+                  |      Home Assistant  |
+                  |                      |
+                  |  WebSocket   REST    |
+                  +-----------+----------+
+                              ^
+                 Sync state    | Publish desktop state
+                              |
+             +----------------+----------------+
+             |                                 |
+             |     HA Screen Time Monitor      |
+             |                                 |
+             |  +--------------------------+   |
+             |  |       Main Loop          |   |
+             |  +------------+-------------+   |
+             |               |                 |
+             |               | discovers       |
+             |               v                 |
+             |      Desktop Session            |
+             |                                 |
+             |  starts/stops worker threads    |
+             +-------+------------+------------+
+                     |            |
+                     |            |
+         +-----------+            +-----------+
+         |                                    |
+         v                                    v
+
+ +-------------------+              +-------------------+
+ | HomeAssistant WS  |              | HomeAssistant REST|
+ |                   |              |                   |
+ | receives updates  |              | polling fallback  |
+ +---------+---------+              +---------+---------+
+           |                                  |
+           +---------------+------------------+
+                           |
+                           v
+                   Shared ComputerTime Model
+                           |
+                           v
+                     Countdown Thread
+                           |
+                           |
+              +------------+------------+
+              |                         |
+              v                         v
+       Waybar status.json         Notifications
+                                  Screen locking
+```
+
+---
+
+# Runtime Flow
+
+## 1. Session discovery
+
+The main thread periodically asks:
+
+> "Who is currently using the desktop?"
+
+This is performed by `service.py`.
+
+The discovery process:
+
+- enumerates all login sessions (`loginctl`)
+- ignores SSH sessions
+- ignores idle sessions
+- verifies the user owns a desktop D-Bus
+- retrieves the currently focused application from GNOME Shell
+
+The result is represented by a `Session` object.
+
+---
+
+## 2. Publishing desktop information
+
+Whenever anything about the session changes, the monitor publishes the current desktop state to Home Assistant.
+
+Published information includes:
+
+- logged in user
+- session id
+- active application
+- active window title
+- idle status
+
+This allows Home Assistant automations to react to desktop activity.
+
+---
+
+## 3. Worker lifecycle
+
+Whenever a configured user becomes active:
+
+```
+Main
+    │
+    ├── Countdown thread
+    ├── WebSocket thread
+    └── REST synchronization thread
+```
+
+When the user logs out or another user logs in:
+
+- all workers are stopped
+- the WebSocket is closed
+- threads are joined
+- a new set of workers is created for the new session
+
+Workers are therefore always tied to exactly one desktop session.
+
+---
+
+# Worker Responsibilities
+
+## Main Thread
+
+Responsible for:
+
+- session discovery
+- worker creation/destruction
+- publishing desktop state
+- handling user switches
+
+The main thread intentionally performs very little work.
+
+---
+
+## WebSocket Thread
+
+Maintains a persistent Home Assistant WebSocket connection.
+
+Responsibilities:
+
+- authenticate
+- subscribe to entity changes
+- immediately update the shared model
+
+This is the preferred synchronization mechanism because updates arrive almost instantly.
+
+---
+
+## REST Thread
+
+Acts as a safety net.
+
+Responsibilities:
+
+- periodically read the authoritative state from Home Assistant
+- recover after missed WebSocket events
+- recover after reconnects
+
+Even if the WebSocket temporarily disconnects, the countdown eventually resynchronizes.
+
+---
+
+## Countdown Thread
+
+Runs once per second.
+
+Responsibilities:
+
+- calculate remaining time
+- update Waybar
+- send desktop notifications
+- start the grace period
+- lock the session when the grace period expires
+
+This thread never communicates directly with Home Assistant.
+
+It only consumes the shared model.
+
+---
+
+# Shared Model
+
+All worker threads share a single `ComputerTime` instance.
+
+```
+ComputerTime
+ ├── active
+ ├── started
+ ├── remaining_base
+ └── bootstrap
+```
+
+Access is protected by a mutex.
+
+The model intentionally contains only the minimum state necessary to compute the countdown.
+
+---
+
+# Synchronization Strategy
+
+Home Assistant remains the single source of truth.
+
+```
+Home Assistant
+        │
+        │
+        ▼
+ WebSocket / REST
+        │
+        ▼
+ ComputerTime model
+        │
+        ▼
+ Countdown display
+```
+
+The desktop application performs only short-lived optimistic updates (for example immediately after locking the screen).
+
+These are later overwritten by the authoritative values received from Home Assistant.
+
+---
+
+# Status Output
+
+The countdown thread periodically writes
+
+```
+status.json
+```
+
+into
+
+```
+/run/user/<uid>/ha-time/
+```
+
+Example:
+
+```json
+{
+  "version": 1,
+  "text": "🎮 00:23:15",
+  "tooltip": "Computer time remaining",
+  "color": "green"
+}
+```
+
+The file is written atomically to prevent Waybar from reading partially written JSON.
+
+---
+
+# Design Principles
+
+The application follows several design principles:
+
+- Home Assistant is the source of truth.
+- Each module has a single responsibility.
+- Desktop session detection is isolated from Home Assistant logic.
+- Worker threads communicate only through a shared model.
+- The main thread owns worker lifetime.
+- Failures should degrade gracefully rather than terminate the service.
+- The service should automatically recover from:
+  - WebSocket disconnects
+  - temporary Home Assistant outages
+  - desktop logouts
+  - user switches
+
+---
+
+# Module Responsibilities
+
+| Module | Responsibility |
+|---------|----------------|
+| `main.py` | Application lifecycle and worker management |
+| `service.py` | Desktop session discovery |
+| `config.py` | Load configuration |
+| `model.py` | Shared thread-safe state |
+| `homeassistant_ws.py` | Real-time synchronization |
+| `homeassistant_rest.py` | REST synchronization and state publishing |
+| `countdown.py` | Countdown logic, notifications and screen locking |
+| `status.py` | Publish Waybar status JSON |
+| `logger.py` | Logging configuration |
+
+---
+
+# Thread Model
+
+```
+                     Main Thread
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+        ▼                 ▼                 ▼
+ Countdown Thread   WebSocket Thread   REST Thread
+
+              Shared ComputerTime Model
+```
+
+Only the shared model is accessed concurrently.
+
+Everything else is thread-local.
+
+This keeps synchronization simple while allowing each worker to operate independently.
+
+# 🚀 Installation & Setup[cite: 1]
 
 ### Prerequisites
 Make sure you have Python (version 3.12+) installed and are running a GNOME-based Linux distribution (such as Ubuntu/Edubuntu).
