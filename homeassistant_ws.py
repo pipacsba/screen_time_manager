@@ -1,4 +1,15 @@
-# homeassistant_ws.py
+"""
+homeassistant_ws.py
+
+Maintains a persistent WebSocket connection to Home Assistant.
+
+The WebSocket connection is used exclusively for real-time updates of the
+computer time entities. Whenever Home Assistant changes one of the monitored
+entities, the local model is updated immediately.
+
+If the connection is lost, the client automatically reconnects until the
+application is stopped.
+"""
 
 import json
 import ssl
@@ -9,7 +20,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class HomeAssistantClient:
+    """
+    Receives real-time computer time updates from Home Assistant.
+
+    One instance exists per monitored desktop session.
+    """
 
     def __init__(self, model, config, session, stop_event):
         self.model = model
@@ -18,6 +35,10 @@ class HomeAssistantClient:
         self.user = config.users[self.session.user]
         self.stop_event = stop_event
 
+        #
+        # Configure the websocket client. Actual connection is established
+        # later by run().
+        #
         self.ws = websocket.WebSocketApp(
             self.config.ha_url,
             on_open=self.on_open,
@@ -27,16 +48,32 @@ class HomeAssistantClient:
         )
 
     def run(self):
+        """
+        Keep the websocket connected until the application is stopped.
+
+        If Home Assistant is restarted or the network connection drops,
+        automatically reconnect after a short delay.
+        """
+
         while not self.stop_event.is_set():
+
             logger.info("Starting Home Assistant WS connection...")
+
             self.ws.run_forever(
                 sslopt={"cert_reqs": ssl.CERT_NONE}
             )
+
+            #
+            # run_forever() returns only after the connection closes.
+            #
             if not self.stop_event.is_set():
-                logger.warning("WS connection lost. Reconnecting in 5 seconds...")
+                logger.warning(
+                    "WS connection lost. Reconnecting in 5 seconds..."
+                )
                 self.stop_event.wait(5)
 
     def close(self):
+        """Close the websocket connection."""
         self.ws.close()
 
     # ------------------------------------------------------------------
@@ -53,9 +90,13 @@ class HomeAssistantClient:
         logger.info("WS CLOSED: %s %s", code, msg)
 
     def on_message(self, ws, message):
+        """
+        Dispatch incoming Home Assistant websocket messages.
+        """
 
         data = json.loads(message)
-        #logger.debug("%s", data)
+        # logger.debug("%s", data)
+
         msg_type = data.get("type")
 
         if msg_type == "auth_required":
@@ -67,10 +108,17 @@ class HomeAssistantClient:
             return
 
         if msg_type == "result":
+            #
+            # Response to one of our commands (authentication,
+            # subscription, etc.).
+            #
             logger.info(json.dumps(data, indent=2))
             return
 
         if msg_type == "event":
+            #
+            # State change notification for one of our subscribed entities.
+            #
             self._handle_event(data)
             return
 
@@ -79,6 +127,7 @@ class HomeAssistantClient:
     # ------------------------------------------------------------------
 
     def _authenticate(self):
+        """Authenticate using the long-lived access token."""
 
         logger.info("Authenticating...")
 
@@ -88,6 +137,12 @@ class HomeAssistantClient:
         }))
 
     def _subscribe(self):
+        """
+        Subscribe only to the three entities required by this user.
+
+        Using subscribe_trigger greatly reduces websocket traffic compared
+        to subscribing to every state change.
+        """
 
         logger.info("Authentication successful.")
 
@@ -111,12 +166,18 @@ class HomeAssistantClient:
     # ------------------------------------------------------------------
 
     def _handle_event(self, data):
+        """
+        Update the shared computer time model from a Home Assistant event.
+        """
 
         trigger = data["event"]["variables"]["trigger"]
 
         entity = trigger["entity_id"]
         state = trigger["to_state"]["state"]
 
+        #
+        # Protect the shared model while updating it.
+        #
         with self.model.lock:
 
             if entity == self.user.active_entity:
@@ -136,6 +197,10 @@ class HomeAssistantClient:
                 logger.warning("Unexpected entity: %s", entity)
                 return
 
+            #
+            # After the first successful update, the countdown thread can
+            # trust the values stored in the model.
+            #
             self.model.bootstrap = False
 
         logger.info(
