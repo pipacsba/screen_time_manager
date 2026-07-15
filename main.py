@@ -129,7 +129,6 @@ def main():
                         daemon=True,
                         name="ha-rest",
                     ),
-
                 ]
 
                 for t in threads:
@@ -148,10 +147,7 @@ def main():
     except KeyboardInterrupt:
 
         logger.info("Stopping.")
-
-        if workers is not None:
-            workers["stop"].set()
-            workers["ws"].close()
+        stop_workers(workers)
 
 
 if __name__ == "__main__":
