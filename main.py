@@ -106,7 +106,7 @@ def main():
                     ha_publisher.publish_desktop_state(session)
                     old_session = session
                 except Exception:
-                    logger.exception("Failed to publish desktop state")
+                    logger.warning("Failed to publish desktop state")
 
             #
             # Workers should only exist while a configured user owns an
@@ -126,14 +126,10 @@ def main():
 
                     if not session.interactive_session:
 
-                        logger.info("No interactive desktop session.")
+                        logger.debug("No interactive desktop session.")
 
                     else:
-
-                        logger.info(
-                            "Ignoring unconfigured user '%s'",
-                            session.user,
-                        )
+                        logger.debug("Ignoring unconfigured user '%s'", session.user )
 
                     stop_workers(workers)
                     workers = None
@@ -154,10 +150,7 @@ def main():
 
                 if workers is not None:
 
-                    logger.info(
-                        "Stopping workers for %s",
-                        current_user,
-                    )
+                    logger.info("Stopping workers for %s", current_user )
                     stop_workers(workers)
 
                 logger.info(
