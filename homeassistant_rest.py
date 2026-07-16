@@ -77,7 +77,7 @@ class HomeAssistantRestClient:
                 self._refresh()
 
             except Exception:
-                logger.exception("REST sync failed")
+                logger.error("REST sync failed")
 
             if self.stop_event.wait(self.config.ha_poll_interval):
                 break
@@ -112,7 +112,7 @@ class HomeAssistantRestClient:
             self.model.remaining_base = remaining
             self.model.bootstrap = False
 
-        logger.info(
+        logger.debug(
             "REST sync: active=%s started=%s (tz=%r) remaining=%s",
             active,
             started,
@@ -163,7 +163,7 @@ class HomeAssistantPublisher:
         Empty strings are used instead of None so the entity always has
         stable attribute types.
         """
-        logger.info("Published desktop state %s", session)
+        logger.debug("Published desktop state %s", session)
         try:
 
             payload = {
@@ -187,7 +187,7 @@ class HomeAssistantPublisher:
 
             response.raise_for_status()
 
-            logger.info(
+            logger.debug(
                 "Published desktop state for %s",
                 session.user if session.interactive_session else "<none>",
             )
