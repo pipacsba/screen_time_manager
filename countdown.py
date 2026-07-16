@@ -121,7 +121,7 @@ def countdown(model, status, stop_event):
                 # information. This should be rare but avoids crashing
                 # the countdown thread.
                 #
-                logger.exception(
+                logger.error(
                     "Datetime mismatch: started=%r (tz=%r), now=%r (tz=%r)",
                     started,
                     started.tzinfo,
