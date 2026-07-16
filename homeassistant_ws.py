@@ -58,7 +58,7 @@ class HomeAssistantClient:
 
         while not self.stop_event.is_set():
 
-            logger.info("Starting Home Assistant WS connection...")
+            logger.debug("Starting Home Assistant WS connection...")
 
             self.ws.run_forever(
                 sslopt={"cert_reqs": ssl.CERT_NONE}
@@ -82,13 +82,13 @@ class HomeAssistantClient:
     # ------------------------------------------------------------------
 
     def on_open(self, ws):
-        logger.info("Connected to Home Assistant")
+        logger.debug("Connected to Home Assistant")
 
     def on_error(self, ws, error):
-        logger.info("WS ERROR: %r", error)
+        logger.debug("WS ERROR: %r", error)
 
     def on_close(self, ws, code, msg):
-        logger.info("WS CLOSED: %s %s", code, msg)
+        logger.debug("WS CLOSED: %s %s", code, msg)
 
     def on_message(self, ws, message):
         """
@@ -96,7 +96,7 @@ class HomeAssistantClient:
         """
 
         data = json.loads(message)
-        # logger.debug("%s", data)
+        logger.debug("%s", data)
 
         msg_type = data.get("type")
 
@@ -113,7 +113,7 @@ class HomeAssistantClient:
             # Response to one of our commands (authentication,
             # subscription, etc.).
             #
-            logger.info(json.dumps(data, indent=2))
+            logger.debug(json.dumps(data, indent=2))
             return
 
         if msg_type == "event":
@@ -130,7 +130,7 @@ class HomeAssistantClient:
     def _authenticate(self):
         """Authenticate using the long-lived access token."""
 
-        logger.info("Authenticating...")
+        logger.debug("Authenticating...")
 
         self.ws.send(json.dumps({
             "type": "auth",
@@ -145,7 +145,7 @@ class HomeAssistantClient:
         to subscribing to every state change.
         """
 
-        logger.info("Authentication successful.")
+        logger.debug("Authentication successful.")
 
         self.ws.send(json.dumps({
             "id": 1,
@@ -160,7 +160,7 @@ class HomeAssistantClient:
             },
         }))
 
-        logger.info("Subscribed.")
+        logger.debug("Subscribed.")
 
     # ------------------------------------------------------------------
     # State updates
