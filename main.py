@@ -18,13 +18,14 @@ import time
 
 from config import load_config
 from model import ComputerTime
-from service import discover_session
+from service import discover_session, Session
 from homeassistant_ws import HomeAssistantClient
 from homeassistant_rest import HomeAssistantRestClient, HomeAssistantPublisher
 from countdown import countdown
 from status import StatusWriter
 from logger import setup_logging
 import logging
+import signal
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -55,8 +56,67 @@ def stop_workers(workers):
     for t in workers["threads"]:
         t.join(timeout=2)
 
+def publish_inactive_desktop_state(ha_publisher):
+    """
+    Tell Home Assistant that no interactive desktop session is active.
+
+    This is important during service shutdown: otherwise Home Assistant
+    may retain the last active session state and continue to calculate
+    screen time even though the monitor is no longer running.
+
+    The Python model uses None for all session-specific values. 
+    The HomeAssistantPublisher converts these to the appropriate values 
+    for the published HA entity.
+    """
+
+    session = Session(
+        interactive_session=False,
+        user=None,
+        uid=None,
+        session=None,
+        idle=True,
+        runtime_dir=None,
+        bus=None,
+        app=None,
+        app_title=None,
+    )
+
+    try:
+        ha_publisher.publish_desktop_state(session)
+        logger.info("Published inactive desktop state during shutdown")
+    except Exception:
+        logger.exception(
+            "Failed to publish inactive desktop state during shutdown"
+        )
+
+def shutdown(workers, ha_publisher):
+    """
+    Gracefully shut down the monitor.
+
+    Workers are stopped first, then Home Assistant is explicitly told
+    that there is no active desktop session. The latter prevents HA from
+    continuing to treat the last known desktop state as active.
+    """
+
+    logger.info("Stopping.")
+
+    stop_workers(workers)
+
+    publish_inactive_desktop_state(ha_publisher)
+
 
 def main():
+
+    # 
+    # systemd normally terminates the service using SIGTERM. 
+    # SIGINT is also handled so Ctrl+C behaves in the same way when 
+    # running the program manually from a terminal. 
+    #
+    def handle_signal(signum, frame):
+        raise SystemExit
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
 
     config = load_config()
 
@@ -100,12 +160,19 @@ def main():
             # Publish desktop state only when something changed. This
             # avoids unnecessary REST traffic while still allowing Home
             # Assistant automations to react immediately.
+            # Session is a dataclass, so equality compares all of its 
+            # fields, including the focused application and window title.
             #
             if session != old_session:
                 try:
                     ha_publisher.publish_desktop_state(session)
                     old_session = session
                 except Exception:
+                    # 
+                    # Do not update old_session when publishing fails. 
+                    # This means the same state will be retried during 
+                    # the next polling cycle. 
+                    #
                     logger.warning("Failed to publish desktop state")
 
             #
@@ -177,6 +244,9 @@ def main():
                 #
                 stop_event = threading.Event()
 
+                # 
+                # Home Assistant WebSocket synchronization. 
+                #
                 ha_ws = HomeAssistantClient(
                     model=model,
                     config=config,
@@ -184,6 +254,9 @@ def main():
                     stop_event=stop_event,
                 )
 
+                # 
+                # Home Assistant REST synchronization. 
+                #
                 ha_rest = HomeAssistantRestClient(
                     model=model,
                     config=config,
@@ -247,10 +320,8 @@ def main():
             #
             time.sleep(SESSION_POLL_INTERVAL)
 
-    except KeyboardInterrupt:
-
-        logger.info("Stopping.")
-        stop_workers(workers)
+    except (KeyboardInterrupt, SystemExit):
+        shutdown(workers, ha_publisher)
 
 
 if __name__ == "__main__":
