@@ -83,7 +83,7 @@ def focused_window(user: str, uid: int) -> dict:
     # display also prevents D-Bus autolaunch from failing during
     # transitional desktop states.
     #
-    env.setdefault("DISPLAY", ":0")
+    env["DISPLAY"] = ":0"
 
     pw = pwd.getpwnam(user)
     gid = pw.pw_gid
@@ -112,7 +112,22 @@ def focused_window(user: str, uid: int) -> dict:
             check=True,
         )
 
-        return decode_gdbus_json(result.stdout)
+        window = decode_gdbus_json(result.stdout)
+
+        #
+        # The extension can legitimately return {} when there is
+        # currently no focused window.
+        #
+        if not window:
+            return {
+                "wm_class": None,
+                "title": None,
+            }
+
+        return {
+            "wm_class": window.get("wm_class"),
+            "title": window.get("title"),
+        }
 
     except subprocess.CalledProcessError as exc:
 
