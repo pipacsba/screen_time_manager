@@ -304,7 +304,7 @@ def main():
 
                     threading.Thread(
                         target=countdown,
-                        args=(model, status, stop_event),
+                        args=(model, status, session, stop_event),
                         daemon=True,
                         name="countdown",
                     ),
