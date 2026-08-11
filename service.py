@@ -89,6 +89,13 @@ def focused_window(user: str, uid: int) -> dict:
     gid = pw.pw_gid
     
     try:
+        logger.info(
+            "D-Bus environment: DISPLAY=%r XDG_RUNTIME_DIR=%r DBUS_SESSION_BUS_ADDRESS=%r",
+            env.get("DISPLAY"),
+            env.get("XDG_RUNTIME_DIR"),
+            env.get("DBUS_SESSION_BUS_ADDRESS"),
+        )
+       
         result = subprocess.run(
             [
                 "setpriv",
