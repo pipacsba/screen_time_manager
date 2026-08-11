@@ -35,6 +35,15 @@ logger = logging.getLogger(__name__)
 #
 SESSION_POLL_INTERVAL = 2
 
+#
+# Maximum interval between desktop-state publications to Home Assistant.
+#
+# This acts as a heartbeat. If the service disappears without publishing
+# an inactive state (for example because of a power failure), Home Assistant
+# can detect that the last known state has become stale.
+#
+HARTBEAT_INTERVAL = 20
+
 
 def stop_workers(workers):
     """
@@ -142,6 +151,9 @@ def main():
     #
     ha_publisher = HomeAssistantPublisher(config)
 
+    #initialize heartbeat counter
+    heartbeat_elapsed = 0
+
     try:
 
         while True:
@@ -163,10 +175,16 @@ def main():
             # Session is a dataclass, so equality compares all of its 
             # fields, including the focused application and window title.
             #
-            if session != old_session:
+            if (session != old_session) or (heartbeat_elapsed >= HARTBEAT_INTERVAL):
                 try:
                     ha_publisher.publish_desktop_state(session)
+                    #
+                    # Only consider the heartbeat successful after Home
+                    # Assistant accepted the publication.
+                    #
+                    heartbeat_elapsed = 0
                     old_session = session
+                    
                 except Exception:
                     # 
                     # Do not update old_session when publishing fails. 
@@ -174,7 +192,10 @@ def main():
                     # the next polling cycle. 
                     #
                     logger.warning("Failed to publish desktop state")
+            else:
+                heartbeat_elapsed = heartbeat_elapsed + SESSION_POLL_INTERVAL
 
+            
             #
             # Workers should only exist while a configured user owns an
             # interactive desktop session.
