@@ -77,6 +77,14 @@ def focused_window(user: str, uid: int) -> dict:
     env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
     env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path=/run/user/{uid}/bus"
 
+    #
+    # gdbus itself does not normally need DISPLAY when an explicit
+    # DBUS_SESSION_BUS_ADDRESS is supplied. However, providing the
+    # display also prevents D-Bus autolaunch from failing during
+    # transitional desktop states.
+    #
+    env.setdefault("DISPLAY", ":0")
+
     pw = pwd.getpwnam(user)
     gid = pw.pw_gid
     
@@ -106,8 +114,33 @@ def focused_window(user: str, uid: int) -> dict:
 
         return decode_gdbus_json(result.stdout)
 
+    except subprocess.CalledProcessError as exc:
+
+        #
+        # This commonly happens during login/unlock, before GNOME Shell
+        # has finished exposing the extension's D-Bus service.
+        #
+        logger.debug(
+            "Focused window unavailable for %s: %s",
+            user,
+            exc.stderr.strip() if exc.stderr else exc,
+        )
+
+        return {
+            "wm_class": None,
+            "title": None,
+        }
+
     except Exception:
-        logger.info("Focused window not yet available.")
+
+        #
+        # Unexpected errors are still worth recording.
+        #
+        logger.exception(
+            "Failed to obtain focused window for %s",
+            user,
+        )
+
         return {
             "wm_class": None,
             "title": None,
