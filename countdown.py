@@ -1,38 +1,53 @@
-# countdown.py
+```python
 #
 # Local countdown loop.
 #
 # This thread is responsible only for the local user experience:
-#   • calculating the live remaining time
-#   • writing status.json for the tray icon
-#   • showing the "time is up" notification
-#   • locking the session after the grace period
+# • calculating the live remaining time
+# • writing status.json for the tray icon
+# • showing the "time is up" notification
+# • locking the session after the grace period
 #
 # Home Assistant remains the authoritative source of truth.
 # Whenever HA publishes new values, they overwrite the local optimistic state.
+#
 
 from datetime import datetime, timezone
 from dateutil.tz import tzlocal
 
-import subprocess
 import logging
+import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 
-def notify(title, message):
+def notify(session, title, message):
     """
-    Show a desktop notification.
+    Show a desktop notification in the monitored user's session.
+
+    The countdown service runs as root, so notify-send must be executed
+    with the monitored user's UID and desktop D-Bus environment.
 
     Failures are intentionally ignored because notifications are
     non-critical and should never terminate the countdown thread.
     """
+
+    env = os.environ.copy()
+    env["XDG_RUNTIME_DIR"] = str(session.runtime_dir)
+    env["DBUS_SESSION_BUS_ADDRESS"] = session.bus
+
     subprocess.run(
         [
+            "setpriv",
+            f"--reuid={session.uid}",
+            f"--regid={session.uid}",
+            "--clear-groups",
             "notify-send",
             title,
             message,
         ],
+        env=env,
         check=False,
     )
 
@@ -43,6 +58,7 @@ def lock_screen():
 
     The session manager will determine which graphical session to lock.
     """
+
     subprocess.run(
         [
             "loginctl",
@@ -73,7 +89,7 @@ def format_time(seconds):
     return f"{minutes}:{seconds:02}"
 
 
-def countdown(model, status, stop_event):
+def countdown(model, status, session, stop_event):
     """
     Update the tray status once per second.
 
@@ -130,6 +146,7 @@ def countdown(model, status, stop_event):
                 )
 
                 started = started.replace(tzinfo=tzlocal())
+
                 elapsed = (
                     datetime.now(timezone.utc) - started
                 ).total_seconds()
@@ -137,6 +154,7 @@ def countdown(model, status, stop_event):
             remaining = remaining_base - elapsed
 
         else:
+
             #
             # Timer is paused (educational mode).
             #
@@ -175,6 +193,7 @@ def countdown(model, status, stop_event):
             elif not notification_sent:
 
                 notify(
+                    session,
                     "Time is up",
                     "1 minute grace period started.",
                 )
@@ -234,3 +253,4 @@ def countdown(model, status, stop_event):
         #
         if stop_event.wait(1):
             break
+```
