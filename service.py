@@ -95,6 +95,23 @@ def focused_window(user: str, uid: int) -> dict:
             env.get("XDG_RUNTIME_DIR"),
             env.get("DBUS_SESSION_BUS_ADDRESS"),
         )
+
+        result = subprocess.run(
+            [
+                "setpriv",
+                f"--reuid={uid}",
+                f"--regid={gid}",
+                "--clear-groups",
+                "/usr/bin/env",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=3,
+            check=True,
+        )
+        
+        logger.info("Environment after setpriv:\n%s", result.stdout)
        
         result = subprocess.run(
             [
