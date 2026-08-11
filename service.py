@@ -102,23 +102,6 @@ def focused_window(user: str, uid: int) -> dict:
                 f"--reuid={uid}",
                 f"--regid={gid}",
                 "--clear-groups",
-                "/usr/bin/env",
-            ],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=3,
-            check=True,
-        )
-        
-        logger.info("Environment after setpriv:\n%s", result.stdout)
-       
-        result = subprocess.run(
-            [
-                "setpriv",
-                f"--reuid={uid}",
-                f"--regid={gid}",
-                "--clear-groups",
                 "gdbus",
                 "call",
                 "--session",
@@ -133,9 +116,21 @@ def focused_window(user: str, uid: int) -> dict:
             text=True,
             env=env,
             timeout=3,
-            check=True,
         )
-
+        
+        logger.info(
+            "gdbus result: rc=%s stdout=%r stderr=%r",
+            result.returncode,
+            result.stdout,
+            result.stderr,
+        )
+        
+        if result.returncode != 0:
+            return {
+                "wm_class": None,
+                "title": None,
+            }
+        
         window = decode_gdbus_json(result.stdout)
 
         #
