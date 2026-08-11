@@ -1,4 +1,4 @@
-```python
+# countdown.py
 #
 # Local countdown loop.
 #
@@ -253,4 +253,3 @@ def countdown(model, status, session, stop_event):
         #
         if stop_event.wait(1):
             break
-```
