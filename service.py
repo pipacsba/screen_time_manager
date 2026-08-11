@@ -89,7 +89,7 @@ def focused_window(user: str, uid: int) -> dict:
     gid = pw.pw_gid
     
     try:
-        logger.info(
+        logger.debug(
             "D-Bus environment: DISPLAY=%r XDG_RUNTIME_DIR=%r DBUS_SESSION_BUS_ADDRESS=%r",
             env.get("DISPLAY"),
             env.get("XDG_RUNTIME_DIR"),
@@ -118,7 +118,7 @@ def focused_window(user: str, uid: int) -> dict:
             timeout=3,
         )
         
-        logger.info(
+        logger.debug(
             "gdbus result: rc=%s stdout=%r stderr=%r",
             result.returncode,
             result.stdout,
