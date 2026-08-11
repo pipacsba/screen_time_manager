@@ -16,7 +16,7 @@
 #       to desktop activity.
 #
 
-from datetime import datetime
+from datetime import datetime, timezone
 from dateutil.tz import tzlocal
 import logging
 
@@ -176,6 +176,7 @@ class HomeAssistantPublisher:
                     "idle": session.idle,
                     "app": session.app or "",
                     "app_title": session.app_title or "",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             }
 
