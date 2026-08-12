@@ -1,5 +1,5 @@
-# status.py
 """
+# status.py
 Writes the current countdown state for consumption by desktop widgets.
 
 The status is written as a JSON file inside the user's runtime directory.
@@ -8,7 +8,7 @@ written files.
 """
 
 import json
-from pathlib import Path
+# from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class StatusWriter:
 
     The location is derived from the session's runtime directory so each
     logged-in user receives an independent status file.
-    """    
+    """
 
     def __init__(self, session):
         """
@@ -33,7 +33,7 @@ class StatusWriter:
         previous file. This guarantees that Waybar never reads a partially
         written JSON document.
         """
-        
+
         self.session = session
 
         self.directory = session.runtime_dir / "ha-time"
