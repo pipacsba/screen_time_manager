@@ -1,5 +1,5 @@
-# model.py
 """
+# model.py
 Shared in-memory state for the current desktop session.
 
 Multiple worker threads (WebSocket listener, REST synchronizer and
@@ -19,7 +19,7 @@ BOOTSTRAP_REMAINING = 600      # seconds
 
 
 class ComputerTime:
-
+    """ Class definition of ComputerTime """
     def __init__(self):
 
         #

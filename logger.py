@@ -1,4 +1,7 @@
+"""
 # logger.py
+# Logging basic config
+"""
 
 import logging
 

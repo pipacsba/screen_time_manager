@@ -16,7 +16,7 @@ import os
 import logging
 from typing import Optional
 import pwd
-import grp
+# import grp
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class Session:
 
     When no interactive desktop session exists, only
     `interactive_session` is False and all other fields are None.
-    """    
+    """ 
     interactive_session: bool
     user: Optional[str]
     uid: Optional[int]
@@ -51,7 +51,7 @@ def decode_gdbus_json(output: str) -> dict:
         ('{ ...json... }',)
 
     and return the embedded JSON object.
-    """    
+    """
     output = output.strip()
 
     if not output.startswith("('") or not output.endswith("',)"):
@@ -87,7 +87,7 @@ def focused_window(user: str, uid: int) -> dict:
 
     pw = pwd.getpwnam(user)
     gid = pw.pw_gid
-    
+
     try:
         logger.debug(
             "D-Bus environment: DISPLAY=%r XDG_RUNTIME_DIR=%r DBUS_SESSION_BUS_ADDRESS=%r",
@@ -116,21 +116,22 @@ def focused_window(user: str, uid: int) -> dict:
             text=True,
             env=env,
             timeout=3,
+            check=False,
         )
-        
+
         logger.debug(
             "gdbus result: rc=%s stdout=%r stderr=%r",
             result.returncode,
             result.stdout,
             result.stderr,
         )
-        
+
         if result.returncode != 0:
             return {
                 "wm_class": None,
                 "title": None,
             }
-        
+
         window = decode_gdbus_json(result.stdout)
 
         #
@@ -260,6 +261,7 @@ def get_active_session():
 
 
 def discover_session() -> Session:
+    """ Discover active graphical interface user session """
 
     session = get_active_session()
 

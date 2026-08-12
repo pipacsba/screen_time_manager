@@ -1,3 +1,4 @@
+"""
 # countdown.py
 #
 # Local countdown loop.
@@ -10,14 +11,14 @@
 #
 # Home Assistant remains the authoritative source of truth.
 # Whenever HA publishes new values, they overwrite the local optimistic state.
-#
-
-from datetime import datetime, timezone
-from dateutil.tz import tzlocal
+"""
 
 import logging
 import os
 import subprocess
+
+from datetime import datetime, timezone
+from dateutil.tz import tzlocal
 
 logger = logging.getLogger(__name__)
 
