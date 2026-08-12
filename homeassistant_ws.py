@@ -13,11 +13,12 @@ application is stopped.
 
 import json
 import ssl
+import logging
+
 from datetime import datetime
 from dateutil.tz import tzlocal
-
 import websocket
-import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -82,18 +83,19 @@ class HomeAssistantClient:
     # ------------------------------------------------------------------
 
     def on_open(self, ws):
+        """ When websocket is opened"""
         logger.debug("Connected to Home Assistant")
 
     def on_error(self, ws, error):
+        """ When websocket returned error """
         logger.debug("WS ERROR: %r", error)
 
     def on_close(self, ws, code, msg):
+        """ When websocket is closed """
         logger.debug("WS CLOSED: %s %s", code, msg)
 
     def on_message(self, ws, message):
-        """
-        Dispatch incoming Home Assistant websocket messages.
-        """
+        """ Dispatch incoming Home Assistant websocket messages. """
 
         data = json.loads(message)
         logger.debug("%s", data)
