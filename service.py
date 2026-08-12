@@ -20,7 +20,12 @@ import pwd
 
 logger = logging.getLogger(__name__)
 
-
+# pylint: disable=too-many-instance-attributes
+#
+# A desktop session is intentionally represented by several related
+# attributes. Keeping them together makes the session snapshot easy
+# to pass between components.
+#
 @dataclass
 class Session:
     """
