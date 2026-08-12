@@ -52,17 +52,24 @@ def notify(session, title, message):
     )
 
 
-def lock_screen():
+def lock_screen(session):
     """
-    Lock the current desktop session.
+    Lock the monitored graphical desktop session.
 
-    The session manager will determine which graphical session to lock.
+    The service runs as root, so loginctl cannot reliably determine
+    the calling user's session. Use the session ID discovered by
+    discover_session() explicitly.
     """
+
+    if not session.session:
+        logger.warning("Cannot lock screen: no session ID available")
+        return
 
     subprocess.run(
         [
             "loginctl",
             "lock-session",
+            session.session,
         ],
         check=False,
     )
@@ -174,7 +181,7 @@ def countdown(model, status, session, stop_event):
             #
             if notification_sent and remaining <= -60:
 
-                lock_screen()
+                lock_screen(session)
 
                 #
                 # Optimistically update the local model until Home
