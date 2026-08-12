@@ -82,19 +82,19 @@ class HomeAssistantClient:
     # WebSocket callbacks
     # ------------------------------------------------------------------
 
-    def on_open(self, ws):
+    def on_open(self, _ws):
         """ When websocket is opened"""
         logger.debug("Connected to Home Assistant")
 
-    def on_error(self, ws, error):
+    def on_error(self, _ws, error):
         """ When websocket returned error """
         logger.debug("WS ERROR: %r", error)
 
-    def on_close(self, ws, code, msg):
+    def on_close(self, _ws, code, msg):
         """ When websocket is closed """
         logger.debug("WS CLOSED: %s %s", code, msg)
 
-    def on_message(self, ws, message):
+    def on_message(self, _ws, message):
         """ Dispatch incoming Home Assistant websocket messages. """
 
         data = json.loads(message)
