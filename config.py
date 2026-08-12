@@ -1,4 +1,5 @@
-#
+"""
+config.py
 # Configuration loader
 #
 # Reads config.json and converts it into strongly typed dataclasses.
@@ -12,7 +13,7 @@
 # Unlike earlier versions, this service runs system-wide, so it loads the
 # configuration for all monitored users. The active desktop session is
 # determined at runtime, and the appropriate UserConfig is selected later.
-#
+"""
 
 import json
 from dataclasses import dataclass
