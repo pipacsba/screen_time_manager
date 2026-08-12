@@ -1,3 +1,4 @@
+"""
 # homeassistant_rest.py
 #
 # Home Assistant REST API client.
@@ -14,11 +15,12 @@
 #       (logged-in user, focused application, idle state, ...)
 #       as a Home Assistant entity so automations can react
 #       to desktop activity.
-#
+"""
+
+import logging
 
 from datetime import datetime, timezone
 from dateutil.tz import tzlocal
-import logging
 
 import requests
 import urllib3
@@ -65,12 +67,10 @@ class HomeAssistantRestClient:
             "Content-Type": "application/json",
         })
 
-    # --------------------------------------------------------------
-    # Main polling loop
-    # --------------------------------------------------------------
-
     def run(self):
-
+        """
+        Main polling loop
+        """
         while not self.stop_event.is_set():
 
             try:
