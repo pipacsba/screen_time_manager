@@ -1,5 +1,5 @@
-# main.py
 """
+# main.py
 Main entry point for the screen time monitor.
 
 The service continuously watches for the currently active graphical
@@ -15,6 +15,8 @@ logouts and fast user switching.
 
 import threading
 import time
+import logging
+import signal
 
 from config import load_config
 from model import ComputerTime
@@ -24,8 +26,6 @@ from homeassistant_rest import HomeAssistantRestClient, HomeAssistantPublisher
 from countdown import countdown
 from status import StatusWriter
 from logger import setup_logging
-import logging
-import signal
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -115,11 +115,12 @@ def shutdown(workers, ha_publisher):
 
 
 def main():
+    """ The main loop """
 
-    # 
-    # systemd normally terminates the service using SIGTERM. 
-    # SIGINT is also handled so Ctrl+C behaves in the same way when 
-    # running the program manually from a terminal. 
+    #
+    # systemd normally terminates the service using SIGTERM.
+    # SIGINT is also handled so Ctrl+C behaves in the same way when
+    # running the program manually from a terminal.
     #
     def handle_signal(signum, frame):
         raise SystemExit
@@ -172,7 +173,7 @@ def main():
             # Publish desktop state only when something changed. This
             # avoids unnecessary REST traffic while still allowing Home
             # Assistant automations to react immediately.
-            # Session is a dataclass, so equality compares all of its 
+            # Session is a dataclass, so equality compares all of its
             # fields, including the focused application and window title.
             #
             if (session != old_session) or (heartbeat_elapsed >= HARTBEAT_INTERVAL):
@@ -187,9 +188,9 @@ def main():
                     
                 except Exception:
                     # 
-                    # Do not update old_session when publishing fails. 
-                    # This means the same state will be retried during 
-                    # the next polling cycle. 
+                    # Do not update old_session when publishing fails.
+                    # This means the same state will be retried during
+                    # the next polling cycle.
                     #
                     logger.warning("Failed to publish desktop state")
             else:
@@ -265,8 +266,8 @@ def main():
                 #
                 stop_event = threading.Event()
 
-                # 
-                # Home Assistant WebSocket synchronization. 
+                #
+                # Home Assistant WebSocket synchronization.
                 #
                 ha_ws = HomeAssistantClient(
                     model=model,
@@ -275,8 +276,8 @@ def main():
                     stop_event=stop_event,
                 )
 
-                # 
-                # Home Assistant REST synchronization. 
+                #
+                # Home Assistant REST synchronization.
                 #
                 ha_rest = HomeAssistantRestClient(
                     model=model,
