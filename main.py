@@ -185,9 +185,9 @@ def main():
                     #
                     heartbeat_elapsed = 0
                     old_session = session
-                    
+
                 except Exception:
-                    # 
+                    #
                     # Do not update old_session when publishing fails.
                     # This means the same state will be retried during
                     # the next polling cycle.
@@ -196,7 +196,7 @@ def main():
             else:
                 heartbeat_elapsed = heartbeat_elapsed + SESSION_POLL_INTERVAL
 
-            
+
             #
             # Workers should only exist while a configured user owns an
             # interactive desktop session.
