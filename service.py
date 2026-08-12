@@ -28,7 +28,7 @@ class Session:
 
     When no interactive desktop session exists, only
     `interactive_session` is False and all other fields are None.
-    """ 
+    """
     interactive_session: bool
     user: Optional[str]
     uid: Optional[int]
