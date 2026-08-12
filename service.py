@@ -39,6 +39,20 @@ class Session:
     app: Optional[str]
     app_title: Optional[str]
 
+def inactive_session() -> Session:
+    """ tiny factory to create inactive session object """
+    return Session(
+        interactive_session=False,
+        user=None,
+        uid=None,
+        session=None,
+        idle=True,
+        runtime_dir=None,
+        bus=None,
+        app=None,
+        app_title=None,
+    )
+
 
 def decode_gdbus_json(output: str) -> dict:
     """
@@ -266,17 +280,7 @@ def discover_session() -> Session:
     session = get_active_session()
 
     if session is None:
-        return Session(
-            interactive_session=False,
-            user=None,
-            uid=None,
-            session=None,
-            idle=True,
-            runtime_dir=None,
-            bus=None,
-            app=None,
-            app_title=None,
-        )
+        return inactive_session()
 
     window = focused_window(
         session["user"],
