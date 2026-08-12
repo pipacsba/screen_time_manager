@@ -20,7 +20,7 @@ import signal
 
 from config import load_config
 from model import ComputerTime
-from service import discover_session, Session
+from service import discover_session, Session, inactive_session
 from homeassistant_ws import HomeAssistantClient
 from homeassistant_rest import HomeAssistantRestClient, HomeAssistantPublisher
 from countdown import countdown
@@ -78,17 +78,7 @@ def publish_inactive_desktop_state(ha_publisher):
     for the published HA entity.
     """
 
-    session = Session(
-        interactive_session=False,
-        user=None,
-        uid=None,
-        session=None,
-        idle=True,
-        runtime_dir=None,
-        bus=None,
-        app=None,
-        app_title=None,
-    )
+    session = inactive_session()
 
     try:
         ha_publisher.publish_desktop_state(session)
